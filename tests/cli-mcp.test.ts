@@ -75,3 +75,33 @@ test('new harness flags preserve legacy credentials and reject conflicts before 
  for(const body of [{workspace:'w',alias:'http'},{workspace:'w',alias:'http',harness:'codex',provider:'claude'}])assert.equal((await post(body)).ok,false);
  const result=await post({workspace:'w',alias:'http',harness:'opencode'});assert.equal(result.ok,true);assert.equal((await result.json() as any).session.provider,'opencode');
 });
+
+test('managed credentials and immutable record snapshots stay with the session data directory',async t=>{
+  const {statSync}=await import('node:fs');
+  const dir=mkdtempSync(join(tmpdir(),'durebak-managed-')),data=join(dir,'data');
+  let runtime=await startRuntime(data);
+  t.after(async()=>{await runtime.close();rmSync(dir,{recursive:true,force:true});});
+  const registered=JSON.parse((await run('register','--data-dir',data,'--workspace',dir,'--alias','managed','--harness','codex')).stdout);
+  const file=registered.credential_file;
+  assert.equal(file.startsWith(join(data,'credentials')+'/'),true);assert.equal(statSync(file).mode&0o777,0o600);
+  const paths=JSON.parse((await run('paths','--session',file,'--data-dir',join(dir,'unrelated'))).stdout);
+  assert.equal(paths.data_dir,data);assert.equal(paths.records_dir,join(data,'records'));
+  const task=JSON.parse((await run('call','task_create','--session',file,'--json',JSON.stringify({title:'Remember review',criteria:'Keep history',key:'managed-task'}))).stdout);
+  const first=JSON.parse((await run('export',task.id,'--session',file)).stdout);
+  assert.equal(first.path.startsWith(join(data,'records')+'/'),true);
+  assert.equal(statSync(first.path).mode&0o777,0o600);
+  assert.equal(JSON.parse((await run('export',task.id,'--session',file)).stdout).status,'unchanged');
+  await run('call','task_claim','--session',file,'--json',JSON.stringify({id:task.id,version:task.version}));
+  const second=JSON.parse((await run('export',task.id,'--session',file)).stdout);
+  assert.notEqual(second.path,first.path);assert.match(readFileSync(first.path,'utf8'),/State: pending/);assert.match(readFileSync(second.path,'utf8'),/State: claimed/);
+  await runtime.close();runtime=await startRuntime(data);
+  const events=JSON.parse((await run('call','events','--session',file)).stdout);
+  assert.ok(events.items.some((e:{kind:string})=>e.kind==='task.claimed'));
+  assert.equal(JSON.parse((await run('export',task.id,'--session',file)).stdout).status,'unchanged');
+});
+
+test('an explicitly empty output path is rejected instead of selecting managed storage',async t=>{
+  const dir=mkdtempSync(join(tmpdir(),'durebak-empty-out-')),data=join(dir,'data');
+  const runtime=await startRuntime(data);t.after(async()=>{await runtime.close();rmSync(dir,{recursive:true,force:true});});
+  await assert.rejects(run('register','--data-dir',data,'--workspace',dir,'--alias','empty-out','--harness','codex','--out',''),/missing_out/);
+});

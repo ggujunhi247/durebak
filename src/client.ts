@@ -1,11 +1,10 @@
 import { readFileSync, lstatSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { fail } from './domain.js';
 import type { Operation } from './runtime.js';
 
-export const dataDirectory = (value?: string) => resolve(value ?? process.env.DUREBAK_DATA_DIR ?? join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'durebak'));
+export { dataDirectory } from './paths.js';
 export function privateJson(path: string): unknown {
   const stat = lstatSync(path);
   if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || stat.size > 16384) fail('unsafe_credential_file');
