@@ -27,7 +27,9 @@
     "lab": "npm run build && node scripts/host-lab.mjs --mode mcp",
     "lab:live": "npm run build && node scripts/host-lab.mjs --mode live",
     "pretest": "npm run build",
-    "lab:matrix": "npm run build && node scripts/host-matrix.mjs"
+    "lab:matrix": "npm run build && node scripts/host-matrix.mjs",
+    "secrets:check": "node scripts/check-secrets.mjs",
+    "secrets:selftest": "node scripts/test-secret-scan.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.1",

@@ -24,7 +24,7 @@
 
 - [ ] 실제 GitHub owner, npm 이름/소유권, Apache-2.0 표기, 보안 신고 경로 확정.
 - [ ] `git status --short`, `git ls-files`, `git log --all --format='%h %an <%ae>'`로 파일 및 공개 작성자 정보 검토. 출력은 로컬에서만 검토.
-- [ ] 전체 공개 이력에 credential·실제 대화가 없는지 별도 검토. 현재 repo:check는 현재 파일 검사이며 history 검사기가 아니다.
+- [ ] 전체 공개 이력에 credential·실제 대화가 없는지 별도 검토. `npm run secrets:check`로 전체 로컬 Git refs·staged 변경·업로드 후보 파일을 검사한다. repo:check 자체는 history 검사기가 아니다.
 - [ ] `npm run repo:check`, `npm run check`, `npm test` 통과.
 - [ ] `npm run package:check` 및 **같은 tgz**를 입력한 설치 smoke 통과.
 - [ ] 실제 GitHub CI와 릴리스 권한·환경·태그 보호 설정 확인.
@@ -38,3 +38,5 @@
 기존 개발 이력은 로컬 비공개 백업에 보존하고, 사용자 승인에 따라 공개 이력은 새 초기 커밋으로 시작한다. 공개 작성자에는 GitHub 비공개 이메일을 사용한다. 소스 알파 공개는 npm 릴리스·이종 실통신 지원 완료를 뜻하지 않는다. 공개 저장소에는 README의 검증 범위와 제한을 함께 게시한다.
 
 소스 공개 완료: [ggujunhi247/durebak](https://github.com/ggujunhi247/durebak), Apache-2.0, GitHub 비공개 취약점 신고 활성화. [첫 원격 CI](https://github.com/ggujunhi247/durebak/actions/runs/36610450906)의 Linux·macOS 검사와 워크플로 검증이 모두 통과했다. npm은 미출판 상태로 유지한다.
+
+Gitleaks 설치·로컬 pre-push hook·CI 차단 규칙은 [SECURITY](../SECURITY.md#publication-secret-checks)를 따른다. 검사 원본 보고서는 공개하지 않는다.
