@@ -1,6 +1,6 @@
 # Release runbook
 
-The source repository is `ggujunhi247/durebak`. The npm package remains unpublished with `package.json.private=true`; this flag prevents npm publication and does not control GitHub visibility. The release workflow is prepared, not a completed npm release.
+The source repository is `ggujunhi247/durebak`. The npm package is prepared for its first public `alpha` publication. `publishConfig` fixes the public registry, access and default alpha channel; the private flag has been removed for this release candidate. Registry publication still requires authenticated npm access. Configuration readiness is not proof of a completed npm release.
 
 ## One-time setup
 

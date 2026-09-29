@@ -20,4 +20,4 @@ Report vulnerabilities privately through [GitHub private vulnerability reporting
 
 ## Release gate
 
-Before npm publication: confirm the package namespace, review the exact tarball, verify private reporting, pass the supported-platform CI matrix and complete the host integration checks required by the advertised support level. Public source availability does not imply production readiness or validated heterogeneous model communication. The package remains `private` until npm release decisions are made.
+Before npm publication: confirm the package namespace, review the exact tarball, verify private reporting, pass the supported-platform CI matrix and complete the host integration checks required by the advertised support level. Public source availability does not imply production readiness or validated heterogeneous model communication. Public publish settings alone do not publish a package; the release still requires authenticated npm access and verification of the exact artifact.

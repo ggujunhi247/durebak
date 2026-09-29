@@ -74,7 +74,7 @@ npm run lab
 
 ## 배포
 
-[Apache-2.0](LICENSE) 라이선스의 실험적 알파입니다. 소스 저장소는 [ggujunhi247/durebak](https://github.com/ggujunhi247/durebak)이며 **npm에는 아직 게시하지 않았습니다.** 현재는 위의 소스 설치 방법을 사용하세요. `package.json`의 `private: true`는 npm 실수 게시를 막는 설정이며 GitHub 공개 여부와는 별개입니다.
+[Apache-2.0](LICENSE) 라이선스의 실험적 알파입니다. 소스 저장소는 [ggujunhi247/durebak](https://github.com/ggujunhi247/durebak)이며 **npm에는 아직 게시하지 않았습니다.** 현재는 위의 소스 설치 방법을 사용하세요. npm 배포 설정은 공개 `alpha` 채널용으로 준비되어 있습니다. 설정 준비와 실제 registry 게시는 별개이며, 게시 완료 전에는 위 소스 설치 방법을 사용하세요.
 
 제품명은 **두레박**, 영문 브랜드와 CLI 식별자는 **Durebak / durebak**입니다.
 

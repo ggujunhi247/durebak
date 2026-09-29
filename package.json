@@ -4,7 +4,6 @@
   "description": "Local durable collaboration between coding-agent sessions",
   "type": "module",
   "license": "Apache-2.0",
-  "private": true,
   "engines": {
     "node": ">=24.0.0"
   },
@@ -46,5 +45,10 @@
   "homepage": "https://github.com/ggujunhi247/durebak#readme",
   "bugs": {
     "url": "https://github.com/ggujunhi247/durebak/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha",
+    "registry": "https://registry.npmjs.org/"
   }
 }
