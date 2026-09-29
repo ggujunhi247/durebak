@@ -36,3 +36,5 @@
 ## 최초 소스 공개
 
 기존 개발 이력은 로컬 비공개 백업에 보존하고, 사용자 승인에 따라 공개 이력은 새 초기 커밋으로 시작한다. 공개 작성자에는 GitHub 비공개 이메일을 사용한다. 소스 알파 공개는 npm 릴리스·이종 실통신 지원 완료를 뜻하지 않는다. 공개 저장소에는 README의 검증 범위와 제한을 함께 게시한다.
+
+소스 공개 완료: [ggujunhi247/durebak](https://github.com/ggujunhi247/durebak), Apache-2.0, GitHub 비공개 취약점 신고 활성화. [첫 원격 CI](https://github.com/ggujunhi247/durebak/actions/runs/36610450906)의 Linux·macOS 검사와 워크플로 검증이 모두 통과했다. npm은 미출판 상태로 유지한다.

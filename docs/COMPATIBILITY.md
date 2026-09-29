@@ -5,7 +5,7 @@ Status on 2026-09-30. A generated configuration is not evidence of a live host i
 | Component | Evidence | Status |
 | --- | --- | --- |
 | macOS runtime, Node 24 and 26 | Local tests and installed-package smoke | Locally verified |
-| Linux, Node 24 | CI matrix prepared; no remote run yet | Pending CI |
+| Linux, Node 24 | [Public CI](https://github.com/ggujunhi247/durebak/actions/runs/36610450906): full suite and installed-package smoke | CI verified |
 | Codex CLI 0.146.0 | Generated-setup real Codex-to-Codex lab, separate identities, 10 MCP calls; isolated-profile TOML parser | Live communication verified; see testing reports |
 | Claude Code 2.1.87 | Configuration generated; live API authentication expired | Experimental |
 | OpenCode 1.18.33 | Temporary installation: effective config parser and permission/identity guard verified; not globally installed; model/API call not tested | Experimental |

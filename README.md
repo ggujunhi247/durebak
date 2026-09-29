@@ -27,7 +27,7 @@ node dist/cli.js serve
 
 - 실제 Codex → Codex 요청·검토·결과 제출을 검증했습니다.
 - Claude Code·OpenCode 설정 어댑터와 6방향 시험 도구를 제공합니다. **이종 모델 간 실통신 성공은 아직 검증하지 못했습니다.**
-- Node 24·26 로컬 테스트 69개와 실제 MCP 프로세스 왕복 검사를 통과했습니다. 원격 CI 결과는 이 저장소의 Actions에서 확인할 수 있습니다.
+- Node 24·26 로컬 테스트 69개와 실제 MCP 프로세스 왕복 검사를 통과했습니다. [Linux·macOS 원격 CI](https://github.com/ggujunhi247/durebak/actions/runs/36610450906)에서도 테스트와 패키지 검사를 통과했습니다.
 - 자동 세션 깨우기·네이티브 대화 재개·무인 반복 개선은 아직 지원하지 않습니다.
 
 자세한 버전과 제한은 [호환성](docs/COMPATIBILITY.md)을 확인하세요.
