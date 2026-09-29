@@ -2,6 +2,9 @@
 
 ## 0.1.0-alpha.1 — Unreleased
 
+- New installations default to ~/.durebak, preserving explicit paths and legacy databases.
+- Managed session credentials and immutable Markdown record snapshots when --out is omitted; paths command for discovery.
+
 - Local authenticated runtime and per-session MCP connections.
 - Durable priority queues, delivery leases, receipt acknowledgements and bounded retries.
 - Tasks, content-addressed artifacts and explicit Markdown records.

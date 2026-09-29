@@ -1,6 +1,6 @@
 # 두레박 사용법 — cooperative alpha
 
-Node.js 24 이상이 필요하다. 현재 GitHub/npm에 배포한 패키지는 없으며 저장소에서 빌드해 실행한다.
+Node.js 24 이상이 필요하다. GitHub 소스는 공개되어 있으며 npm은 아직 미출판이다. 저장소에서 빌드해 실행한다.
 
 ```sh
 npm ci
@@ -14,11 +14,18 @@ node dist/cli.js --help
 node dist/cli.js serve
 ```
 
-별도 터미널에서 계속 실행해 둔다. 종료는 Ctrl-C. 데이터 위치는 `--data-dir`, `DUREBAK_DATA_DIR`, `$XDG_DATA_HOME/durebak`, `~/.local/share/durebak` 순서다. 디렉터리는 0700이어야 하며 자동으로 생성된다. 서버는 임의의 loopback 포트를 사용한다.
+별도 터미널에서 계속 실행해 둔다. 종료는 Ctrl-C. 새 설치의 기본 데이터 위치는 `~/.durebak`이다. `--data-dir`, `DUREBAK_DATA_DIR`, 명시된 `$XDG_DATA_HOME/durebak`은 이 순서로 기본값보다 우선한다. 이 설정들이 없고 기존 `~/.local/share/durebak/runtime.sqlite`가 있으면 기존 위치를 계속 사용한다. 두 기본 위치 모두 DB가 있으면 `ambiguous_data_directory`로 멈추므로 `--data-dir`로 선택한다. DB를 자동 이동하거나 합치지 않는다. 디렉터리는 0700이어야 하며 자동으로 생성된다. 서버는 임의의 loopback 포트를 사용한다.
 
 ## 2. 참여 세션 등록
 
-프로젝트 밖에 비공개 credential 디렉터리를 만든다. workspace 경로는 실제 존재하는 디렉터리로 바꾼다.
+`--out`을 생략하면 선택한 데이터 디렉터리의 `credentials/session-<무작위 ID>.json`에 안전하게 저장하고 `credential_file`을 출력한다. 다음처럼 등록한 뒤, 출력된 각 파일 경로를 이후 명령의 `--session`으로 사용한다. workspace 경로는 실제 존재하는 디렉터리로 바꾼다.
+
+```sh
+node dist/cli.js register --workspace /absolute/path/to/project --alias builder --harness codex
+node dist/cli.js register --workspace /absolute/path/to/project --alias reviewer --harness claude-code
+```
+
+아래는 파일명을 직접 지정하는 기존 방식이다. 프로젝트 밖의 비공개 디렉터리를 사용한다.
 
 ```sh
 mkdir -m 700 "$HOME/.durebak-sessions"
@@ -104,6 +111,34 @@ queue_status·receive의 retry_after_ms만큼 호스트 밖에서 기다린다. 
 - 현재는 호출별 크기 제한이다. 모델 한 턴 전체의 토큰 예산, delta epoch, 역할별 자동 context assembler와 provider prompt cache 제어는 구현하지 않았다. 실제 토큰 절감률은 측정하지 않았다.
 
 ## 7. 기록 내보내기
+
+메시지, 전달·수신 확인 이벤트, 작업 revision, 결과 산출물은 동작할 때 SQLite에 자동 보존된다. 외부 호스트의 전체 대화나 API 인증 정보는 수집하지 않는다. 사람이 읽는 Markdown은 `export`를 호출할 때 생성한다.
+
+```sh
+node dist/cli.js paths
+node dist/cli.js paths --session /path/to/session.json
+node dist/cli.js call events --session /path/to/session.json --json '{"after":0,"limit":20}'
+node dist/cli.js call tasks --session /path/to/session.json
+node dist/cli.js export TASK_ID --session /path/to/session.json
+```
+
+`paths`는 파일을 만들지 않고 저장 위치만 출력한다. `--session`이 있으면 credential에 기록된 실제 데이터 위치를 보여 준다. `export`에서 `--out`을 생략하면 세션 데이터 디렉터리의 `records/<workspace 식별자 해시>/<task ID 해시>-<기록 내용 해시>.md`에 저장한다. 같은 내용은 재사용하고 상태/revision이 바뀌면 새 파일로 남겨 이전 기록을 보존한다. 식별자는 경로로 직접 사용하지 않는다. 이벤트는 workspace별 페이지로 조회하고 `next`를 다음 `after`에 사용한다.
+
+기본 새 설치의 구조는 다음과 같다. DB 안에 메시지·이벤트·산출물·파생 캐시가 함께 들어 있고, 디렉터리는 0700, 생성되는 인증/기록 파일은 0600이다.
+
+```text
+~/.durebak/
+  runtime.sqlite       # 원본 상태와 추적 이력 (WAL 파일 포함)
+  admin.json           # 런타임 관리 인증 정보
+  connection.json      # 로컬 서버 연결 정보
+  credentials/         # 세션별 인증 파일
+  records/             # 명시적으로 내보낸 불변 Markdown 기록
+```
+
+추후 검토에는 `events`, `inbox`, `task_get`, `artifact_read`와 이 기록을 활용한다. 자동 학습이나 모델 기억 주입을 수행하는 기능은 아니다. 백업하려면 daemon을 멈춘 뒤 데이터 디렉터리 전체를 복사하고 비공개 파일 권한을 유지한다. 기존 외부 credential 파일과 `--out` 사용법도 그대로 지원한다.
+
+출력 파일을 직접 지정하려면:
+
 
 ```sh
 node dist/cli.js export TASK_ID --session "$HOME/.durebak-sessions/builder.json" --out /path/to/reviewed-task-record.md
