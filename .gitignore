@@ -41,3 +41,32 @@ runtime.lock
 # Release artifacts are attached explicitly after verification, never source files.
 /release/
 *.tsbuildinfo
+
+# Private host state; do not ignore shared skills or plugin manifests.
+**/.codex/auth.json
+**/.codex/history.jsonl
+**/.codex/sessions/
+**/.codex/log/
+**/.claude/settings.local.json
+**/.claude/projects/
+**/.claude/history.jsonl
+**/.opencode/auth.json
+.ssh/
+.aws/
+.gnupg/
+
+# Local exports and backups belong in private storage, not source control.
+/credentials/
+/records/
+/backups/
+/logs/
+/reports/
+/.security-reports/
+*.bundle
+*.p12
+*.pfx
+*.keystore
+*.bak
+*.swp
+/gitleaks-report*.json
+/gitleaks-report*.sarif

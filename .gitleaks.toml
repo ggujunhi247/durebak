@@ -1,0 +1,10 @@
+title = "Durebak publication secret checks"
+[extend]
+useDefault = true
+
+[[rules]]
+id = "durebak-session-token"
+description = "Durebak session or administrator bearer credential"
+regex = '''(?i)["'](?:token|admin_token)["']\s*:\s*["']([a-f0-9]{64})["']'''
+secretGroup = 1
+keywords = ["token", "admin_token"]
