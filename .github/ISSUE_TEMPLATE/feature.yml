@@ -1,0 +1,13 @@
+name: Feature request
+description: Describe a collaboration problem.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Current workaround and alternatives

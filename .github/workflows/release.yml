@@ -1,0 +1,169 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag on main (v0.1.0-alpha.1)
+        required: true
+        type: string
+      channel:
+        type: choice
+        options: [alpha, beta, rc, latest]
+        default: alpha
+      publish:
+        description: Publish verified artifact (requires npm environment and trusted publisher)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.identity.outputs.commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Validate release identity
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_PUBLISH: ${{ inputs.publish }}
+        run: |
+          args=()
+          if [ "$RELEASE_PUBLISH" = true ]; then args+=(--publish); fi
+          node scripts/check-release.mjs --tag "$RELEASE_TAG" --channel "$RELEASE_CHANNEL" --repository "$RELEASE_REPOSITORY" "${args[@]}"
+      - id: identity
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  verify:
+    needs: resolve
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Validate release identity
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_PUBLISH: ${{ inputs.publish }}
+        run: |
+          args=()
+          if [ "$RELEASE_PUBLISH" = true ]; then args+=(--publish); fi
+          node scripts/check-release.mjs --tag "$RELEASE_TAG" --channel "$RELEASE_CHANNEL" --repository "$RELEASE_REPOSITORY" "${args[@]}"
+      - run: npm run repo:check && npm run check && npm test
+      - run: npm audit --omit=dev --audit-level=high
+  artifact:
+    needs: [resolve, verify]
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.identity.outputs.commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          persist-credentials: false
+      - id: identity
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci && npm run build
+      - name: Pack once and verify that artifact
+        run: |
+          mkdir release
+          npm pack --ignore-scripts --pack-destination release
+          node scripts/check-package.mjs --tarball "$(find release -name '*.tgz')" > release/package-report.json
+          node scripts/smoke-package.mjs --tarball "$(find release -name '*.tgz')" > release/smoke-report.json
+          cd release
+          sha256sum *.tgz > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release
+          path: release/
+          if-no-files-found: error
+  smoke:
+    needs: [resolve, artifact]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release
+          path: release
+      - run: |
+          (cd release && shasum -a 256 --check SHA256SUMS)
+          node scripts/smoke-package.mjs --tarball "$(find release -name '*.tgz')"
+  publish:
+    if: inputs.publish
+    needs: [artifact, smoke]
+    environment: npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.artifact.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install --global npm@11.19.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release
+          path: release
+      - name: Revalidate and publish identical tarball
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          node scripts/check-release.mjs --publish --tag "$RELEASE_TAG" --channel "$RELEASE_CHANNEL" --repository "$RELEASE_REPOSITORY"
+          (cd release && sha256sum --check SHA256SUMS)
+          node scripts/check-package.mjs --tarball "$(find release -name '*.tgz')"
+          npm publish "$(find release -name '*.tgz')" --access public --tag "$RELEASE_CHANNEL" --provenance
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+        run: |
+          args=()
+          if [ "$RELEASE_CHANNEL" != latest ]; then args+=(--prerelease); fi
+          gh release create "$RELEASE_TAG" release/* --verify-tag --title "$RELEASE_TAG" --notes-file CHANGELOG.md "${args[@]}"

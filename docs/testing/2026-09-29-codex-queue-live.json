@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "mode": "live",
+  "reviewer": "codex",
+  "started_at": "2026-09-28T19:37:35.454Z",
+  "node": "v26.8.1",
+  "platform": "darwin",
+  "status": "passed",
+  "hosts": {
+    "codex": {
+      "installed": true,
+      "version": "codex-cli 0.146.0",
+      "stored_login_detected": true
+    },
+    "claude": {
+      "installed": true,
+      "version": "2.1.87 (Claude Code)"
+    },
+    "opencode": {
+      "installed": false,
+      "version": null
+    }
+  },
+  "steps": [
+    {
+      "label": "request",
+      "provider": "codex",
+      "duration_ms": 10534,
+      "exit_code": 0,
+      "reason": null,
+      "reported_usage": {
+        "input_tokens": 29810,
+        "cached_input_tokens": 26112,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 264,
+        "reasoning_output_tokens": 81
+      },
+      "tool_calls": [
+        {
+          "server": "durebak",
+          "tool": "durebak_send",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "label": "review",
+      "provider": "codex",
+      "duration_ms": 16530,
+      "exit_code": 0,
+      "reason": null,
+      "reported_usage": {
+        "input_tokens": 51989,
+        "cached_input_tokens": 29824,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 376,
+        "reasoning_output_tokens": 48
+      },
+      "tool_calls": [
+        {
+          "server": "durebak",
+          "tool": "durebak_receive",
+          "status": "completed"
+        },
+        {
+          "server": "durebak",
+          "tool": "durebak_ack",
+          "status": "completed"
+        },
+        {
+          "server": "durebak",
+          "tool": "durebak_send",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "label": "submit",
+      "provider": "codex",
+      "duration_ms": 27168,
+      "exit_code": 0,
+      "reason": null,
+      "reported_usage": {
+        "input_tokens": 88302,
+        "cached_input_tokens": 81920,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 689,
+        "reasoning_output_tokens": 161
+      },
+      "tool_calls": [
+        {
+          "server": "durebak",
+          "tool": "durebak_receive",
+          "status": "completed"
+        },
+        {
+          "server": "durebak",
+          "tool": "durebak_ack",
+          "status": "completed"
+        },
+        {
+          "server": "durebak",
+          "tool": "durebak_task_get",
+          "status": "completed"
+        },
+        {
+          "server": "durebak",
+          "tool": "durebak_task_claim",
+          "status": "completed"
+        },
+        {
+          "server": "durebak",
+          "tool": "durebak_artifact_put",
+          "status": "completed"
+        },
+        {
+          "server": "durebak",
+          "tool": "durebak_task_complete",
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "name": "request_sender_and_recipient",
+      "passed": true
+    },
+    {
+      "name": "request_body",
+      "passed": true
+    },
+    {
+      "name": "request_acknowledged",
+      "passed": true
+    },
+    {
+      "name": "correlated_reply",
+      "passed": true
+    },
+    {
+      "name": "correction_body",
+      "passed": true
+    },
+    {
+      "name": "correction_acknowledged",
+      "passed": true
+    },
+    {
+      "name": "completed_by_owner",
+      "passed": true
+    },
+    {
+      "name": "result_hash",
+      "passed": true
+    },
+    {
+      "name": "result_content",
+      "passed": true
+    },
+    {
+      "name": "derived_cache_hit",
+      "passed": true
+    },
+    {
+      "name": "zero_model_record",
+      "passed": true
+    }
+  ],
+  "warnings": [],
+  "native_session_continuity": false,
+  "limitations": [
+    "OpenCode is not exercised by this harness.",
+    "Each live invocation is a new native host run; worker runs share one Durebak identity.",
+    "This tests cooperative routing, not provider auto-wake or a production workflow scheduler."
+  ],
+  "finished_at": "2026-09-28T19:38:36.761Z"
+}

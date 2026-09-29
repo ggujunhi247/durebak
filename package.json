@@ -1,0 +1,50 @@
+{
+  "name": "durebak",
+  "version": "0.1.0-alpha.1",
+  "description": "Local durable collaboration between coding-agent sessions",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "bin": {
+    "durebak": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "SECURITY.md",
+    "docs/USAGE.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts tests/*.test.mjs",
+    "package:check": "npm run build && node scripts/check-package.mjs",
+    "prepack": "npm run build",
+    "repo:check": "node scripts/check-repository.mjs",
+    "package:smoke": "npm run build && node scripts/smoke-package.mjs",
+    "lab": "npm run build && node scripts/host-lab.mjs --mode mcp",
+    "lab:live": "npm run build && node scripts/host-lab.mjs --mode live",
+    "pretest": "npm run build",
+    "lab:matrix": "npm run build && node scripts/host-matrix.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggujunhi247/durebak.git"
+  },
+  "homepage": "https://github.com/ggujunhi247/durebak#readme",
+  "bugs": {
+    "url": "https://github.com/ggujunhi247/durebak/issues"
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "document_kind": "design_example_not_executable",
+  "example_version": "0.3.0",
+  "name": "implement-review-verify",
+  "description": "0을 보존하는 옵션 처리: 작업, 검토, 수정, 재검증",
+  "scope": "same_computer",
+  "goal": "limit=0은 0으로 유지하고, 누락된 limit에만 기본값을 적용하며, 음수는 거부한다.",
+  "participants": [
+    {
+      "name": "author",
+      "provider": "opencode",
+      "mode": "managed"
+    },
+    {
+      "name": "reviewer",
+      "provider": "claude",
+      "mode": "managed"
+    },
+    {
+      "name": "verifier",
+      "provider": "codex",
+      "mode": "managed"
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "ac_zero",
+      "description": "limit=0이 기본값으로 치환되지 않는다."
+    },
+    {
+      "id": "ac_missing",
+      "description": "limit가 없으면 명시된 기본값을 적용한다."
+    },
+    {
+      "id": "ac_negative",
+      "description": "음수 limit를 명시적인 오류로 거부한다."
+    }
+  ],
+  "workflow": {
+    "entry": "implement",
+    "steps": [
+      {
+        "id": "implement",
+        "assignee": "author",
+        "on_result": "review"
+      },
+      {
+        "id": "review",
+        "assignee": "reviewer",
+        "on_approve": "verify",
+        "on_request_changes": "revise"
+      },
+      {
+        "id": "revise",
+        "assignee": "author",
+        "on_result": "review",
+        "starts_new_round": true
+      },
+      {
+        "id": "verify",
+        "assignee": "verifier",
+        "on_pass": "completed",
+        "on_fail": "revise"
+      }
+    ],
+    "iteration_model": "Each revision round creates new task IDs; a round's task dependencies remain acyclic.",
+    "require_review_and_evidence_for_same_revision": true,
+    "require_all_acceptance_criteria": true,
+    "on_blocked": "needs_attention"
+  },
+  "limits": {
+    "max_rounds": 5,
+    "max_provider_turns": 30,
+    "task_deadline_seconds": 600,
+    "workflow_deadline_seconds": 3600,
+    "max_concurrent_turns": 3,
+    "no_progress_rounds": 2
+  },
+  "learning": {
+    "record_candidates": true,
+    "promotion": "user_or_preconfigured_policy",
+    "reuse": "accepted_in_scope_only"
+  },
+  "runtime_policy": {
+    "single_owner_per_provider_session": true,
+    "atomic_task_claim": true,
+    "replay_events": "reconcile_only_no_new_work",
+    "native_audit": "disabled",
+    "silent_session_or_backend_fallback": false,
+    "max_rate_limit_retries": 2,
+    "rate_limit_retry_requires": [
+      "explicit_retry_after",
+      "confirmed_not_started_or_previous_turn_ended",
+      "within_existing_budget"
+    ],
+    "unknown_execution": "needs_attention",
+    "logical_cancel_separate_from_stop_confirmation": true,
+    "checkpoint_policy_digest": true,
+    "completion_requires_current_policy_digest": true
+  },
+  "outcome": {
+    "include": [
+      "artifact_revision",
+      "policy_digest",
+      "criterion_verdicts",
+      "evidence",
+      "unresolved_findings",
+      "turns",
+      "retries",
+      "known_usage",
+      "unknown_usage",
+      "stop_status",
+      "next_action"
+    ]
+  },
+  "context_policy": {
+    "target_estimated_tokens_per_turn": 2000,
+    "max_automatic_utf8_bytes_per_turn": 16384,
+    "default_expand_response_max_bytes": 4096,
+    "expansions_share_turn_budget": true,
+    "preserve_required_criteria": true,
+    "delta_requires_confirmed_base": true,
+    "on_unknown_base": "brief_and_source_refs"
+  },
+  "cache_policy": {
+    "scope": "workspace_and_access",
+    "local_max_bytes_per_workspace": 268435456,
+    "key": "source_and_dependency_hashes_plus_processor_and_policy",
+    "semantic_answer_cache": false,
+    "provider_cache_control": "capability_dependent",
+    "prewarm": false,
+    "final_gate_requires_current_run_evidence": true
+  },
+  "records_policy": {
+    "renderer": "deterministic_no_llm",
+    "llm_summarization": "disabled_by_default",
+    "default_visibility": "local",
+    "project_export": "explicit",
+    "user_edit_conflict": "preserve_and_report",
+    "preserve_referenced_evidence": true
+  }
+}

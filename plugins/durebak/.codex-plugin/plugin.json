@@ -1,0 +1,18 @@
+{
+  "name": "durebak",
+  "version": "0.1.0-alpha.1",
+  "description": "두레박: durable local collaboration between coding-agent sessions",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "두레박 · Durebak",
+    "shortDescription": "Coordinate local agent sessions through durable queues.",
+    "category": "Productivity",
+    "longDescription": "Coordinate independently authenticated local sessions with Durebak queue and task tools. Requires separate runtime and MCP setup.",
+    "developerName": "Durebak contributors",
+    "defaultPrompt": "Use Durebak to coordinate the collaboration I requested.",
+    "capabilities": []
+  },
+  "author": {
+    "name": "Durebak contributors"
+  }
+}

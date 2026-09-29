@@ -1,0 +1,17 @@
+{
+  "date": "2026-09-29",
+  "provider": "claude",
+  "version": "2.1.87",
+  "status": "blocked",
+  "stored_login_detected": true,
+  "actual_api_access": false,
+  "evidence": {
+    "isolated_probe_without_mcp": true,
+    "http_status": 401,
+    "error_type": "authentication_error",
+    "message": "OAuth access token has expired. Re-authenticate to continue.",
+    "stream_event": "authentication_failed"
+  },
+  "required_action": "Run claude auth login, then rerun npm run lab:live.",
+  "secrets_or_account_identifiers_included": false
+}
