@@ -45,6 +45,11 @@ jobs:
           node scripts/check-release.mjs --tag "$RELEASE_TAG" --channel "$RELEASE_CHANNEL" --repository "$RELEASE_REPOSITORY" "${args[@]}"
       - id: identity
         run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  secrets:
+    needs: resolve
+    uses: ./.github/workflows/secrets.yml
+    with:
+      ref: ${{ needs.resolve.outputs.commit }}
   verify:
     needs: resolve
     strategy:
@@ -75,7 +80,7 @@ jobs:
       - run: npm run repo:check && npm run check && npm test
       - run: npm audit --omit=dev --audit-level=high
   artifact:
-    needs: [resolve, verify]
+    needs: [resolve, verify, secrets]
     runs-on: ubuntu-latest
     outputs:
       commit: ${{ steps.identity.outputs.commit }}

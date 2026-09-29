@@ -21,3 +21,21 @@ Report vulnerabilities privately through [GitHub private vulnerability reporting
 ## Release gate
 
 Before npm publication: confirm the package namespace, review the exact tarball, verify private reporting, pass the supported-platform CI matrix and complete the host integration checks required by the advertised support level. Public source availability does not imply production readiness or validated heterogeneous model communication. The package remains `private` until npm release decisions are made.
+
+## Publication secret checks
+
+Install Gitleaks 8.30.1 from its official release (verify the archive checksum), then run:
+
+```sh
+npm run repo:check
+npm run secrets:selftest
+npm run secrets:check
+# Enable the repository-local upload guard; review any existing hook first.
+git config --local core.hooksPath .githooks
+```
+
+`GITLEAKS_BIN` can point to a verified executable. Missing scanners and scan errors fail the gate. The scanner checks all locally available Git refs, staged changes, and tracked/nonignored working files. Fetch remote refs before auditing remote history. The self-test verifies detection of uncommitted, staged-only, and deleted historical synthetic credentials, including redacted output.
+
+The pre-push hook runs repository and secret checks before upload. Hooks are local and can be bypassed; CI repeats the checks, and the release workflow requires them before creating its artifact. CI pins the scanner version and archive SHA-256. No raw report is uploaded. These checks do not prove that every secret or personal detail has been found; review the actual diff and npm tarball too.
+
+Ignore rules exclude host authentication/history, credentials, runtime exports, backups and raw security reports while retaining plugin manifests and synthetic fixtures. The repository check rejects force-added ignored files and personal machine paths. `.gitignore` does not remove tracked files or erase history. If a real credential was exposed, revoke/rotate it and investigate its exposure before coordinating history cleanup; deleting the file alone is insufficient.
