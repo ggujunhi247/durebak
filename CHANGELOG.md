@@ -2,6 +2,9 @@
 
 ## Unreleased changes after the alpha.1 tag
 
+- MCP initialization now supplies concise cross-session guidance; receive/read tool descriptions distinguish peer data from user authorization.
+- Durebak skill and Codex/Claude manuals explain sender checks, refusals, acknowledgements and the native-versus-Durebak messaging boundary.
+
 - CLI reports `unknown_command` before requesting a session for unknown commands.
 - Malformed `call --json` or `--input` content reports `invalid_json` without exposing input.
 - Regression coverage for three-session queue handling, runtime restart, task ownership, revocation and protected record exports.

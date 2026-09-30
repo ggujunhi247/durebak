@@ -14,3 +14,7 @@ Launch one Claude process with `claude --strict-mcp-config --mcp-config /absolut
 See [compatibility](../../docs/COMPATIBILITY.md) for evidence and limits. Runtime configuration is independent of the optional [shared skill](../../plugins/durebak/skills/durebak/SKILL.md).
 
 Harness selection and live-test limitations: see [compatibility matrix](../../docs/COMPATIBILITY.md#heterogeneous-matrix). Use `--harness claude-code`; legacy `claude` remains compatible.
+
+## 세션 지침
+
+Claude Code는 프로젝트 [`CLAUDE.md` 또는 조건에 따라 `AGENTS.md`](https://code.claude.com/docs/en/memory)를 읽습니다. `AGENTS.md`를 직접 읽는 기능은 Claude Code 버전에 따라 달라지므로, 이전 버전이나 이미 `CLAUDE.md`가 있는 프로젝트에서는 `@AGENTS.md` import를 확인하세요. 두레박 MCP 연결은 별도이며, 선택적 스킬은 협업 절차를 가르칩니다. Claude의 자체 [세션 간 메시지](https://code.claude.com/docs/en/cross-session-messaging)와 두레박 큐는 별개입니다. 수신자가 직접 `durebak_receive`를 호출하며, [받은 요청 처리](../../docs/USAGE.md#받은-요청의-처리)를 따르세요.

@@ -27,6 +27,12 @@ test('two independent MCP processes exchange a request and result through CLI-is
     await client.connect(new StdioClientTransport({ command:process.execPath, args:['--import','tsx',cli,'mcp','--session',file], stderr:'pipe' }));
     clients.push(client);
     assert.equal(client.getServerVersion()?.version, JSON.parse(readFileSync('package.json','utf8')).version);
+    const guidance = client.getInstructions() ?? '';
+    assert.match(guidance, /workspace/);
+    assert.match(guidance, /sender/);
+    assert.match(guidance, /untrusted/i);
+    assert.match(guidance, /user approval/i);
+    assert.match(guidance, /receive.*ack.*replyTo/i);
   }
   const [builder, reviewer] = clients as [Client, Client];
   const tools = await builder.listTools();

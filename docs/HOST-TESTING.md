@@ -57,7 +57,7 @@ Claude의 `auth status`에 loggedIn=true가 표시되어도 실제 API에서 OAu
 
 ## 확인된 범위
 
-Codex CLI 0.146.0의 Codex↔Codex 시험에서 호스트 호출 3회, MCP 도구 호출 10개와 DB 증거 검사 11개를 통과했습니다. Claude Code는 인증 실패, OpenCode는 실제 모델 시험 환경 미비로 이종 통신 성공을 주장하지 않습니다. 설치·파서 검증과 실제 모델 왕복을 구분합니다.
+Codex CLI 0.146.0의 Codex↔Codex 시험에서 호스트 호출 3회, MCP 도구 호출 10개와 DB 증거 검사 11개를 통과했습니다. 2026-10-01 재시험에서도 Codex가 요청을 보낸 뒤 Claude Code 모델 API가 `authentication_failed`로 중단됐습니다. `claude auth status`의 loggedIn=true만으로 실제 모델 호출 성공을 판단하지 않습니다. OpenCode는 실제 모델 시험 환경 미비로 이종 통신 성공을 주장하지 않습니다. 설치·파서 검증과 실제 모델 왕복을 구분합니다.
 
 일반 메시지는 호스트 밖에서 큐의 전달 가능 시점을 기다립니다. 수신 모델은 `receive`의 id·receipt로 `ack`하며, 답변은 `replyTo`로 원 요청과 연결합니다. 모델을 대기 polling에 사용하거나 긴급 표시로 시험 대기를 우회하지 않습니다.
 
