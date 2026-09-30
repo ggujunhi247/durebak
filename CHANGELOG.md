@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased changes after the alpha.1 tag
+
+- CLI reports `unknown_command` before requesting a session for unknown commands.
+- Malformed `call --json` or `--input` content reports `invalid_json` without exposing input.
+- Regression coverage for three-session queue handling, runtime restart, task ownership, revocation and protected record exports.
+
 ## 0.1.0-alpha.1 — Unreleased
 
 - New installations default to ~/.durebak, preserving explicit paths and legacy databases.

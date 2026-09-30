@@ -72,6 +72,7 @@ async function main() {
     return;
   }
   if (command === 'revoke') { output(await adminCall(selectedDirectory(),'/v1/revoke',{ id:required(positionals[1],'session_id') })); return; }
+  if (!['setup','doctor','mcp','call','export'].includes(command)) fail('unknown_command');
   const file = required(values.session ?? process.env.DUREBAK_SESSION_FILE, 'session');
   if (command === 'setup') { output(createSetup(resolveHarness(values.harness,values.host),file,required(values.out,'out'))); return; }
   if (command === 'doctor') { const result = await doctor(file); output(result); if (!result.ok) process.exitCode=1; return; }
@@ -82,7 +83,9 @@ async function main() {
     if (values.json && values.input) fail('choose_json_or_input');
     const text = values.input ? readFileSync(resolve(values.input),'utf8') : values.json ?? '{}';
     if (Buffer.byteLength(text)>131072) fail('request_too_large');
-    output(await sessionCall(file,operation as Operation,JSON.parse(text))); return;
+    let input: unknown;
+    try { input = JSON.parse(text); } catch { fail('invalid_json'); }
+    output(await sessionCall(file,operation as Operation,input)); return;
   }
   if (command === 'export') {
     const result = z.object({ markdown:z.string() }).parse(await sessionCall(file,'record',{ id:required(positionals[1],'task_id') }));
