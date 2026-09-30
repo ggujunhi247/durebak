@@ -1,6 +1,6 @@
 # Compatibility
 
-Status on 2026-09-30. A generated configuration is not evidence of a live host integration.
+Status updated 2026-10-01. A generated configuration is not evidence of a live host integration.
 
 | Component | Evidence | Status |
 | --- | --- | --- |
@@ -22,7 +22,7 @@ Run `npm run lab:matrix` to probe installation and stored login evidence without
 
 All six directed pairs are represented. A pair passes only after the live lab verifies request identity, both acknowledgements, correlated correction, task ownership, exact nonce-bearing artifact and hash, cache reuse and zero-model record generation. Missing installations, expired authentication and unverified merged configuration remain blocked. Stored login evidence does not establish API access. Authentication failure blocks subsequent pairs using that harness.
 
-On 2026-09-30, Codex → Claude Code sent the request but Claude reported `authentication_failed`; remaining Claude pairs were blocked without repeated API calls. OpenCode pairs were blocked because it is absent from the ordinary PATH. The isolated OpenCode binary was used for parser validation only. **No heterogeneous pair is claimed live-verified yet.**
+On 2026-09-30 and again on 2026-10-01, Codex → Claude Code sent the request but Claude reported `authentication_failed`. The later attempt ran against a build advertising MCP server-wide instructions; Claude failed before any MCP tool call, so its use of those instructions was not verified. `claude auth status` reported logged in, but the model API call failed. Remaining Claude pairs were blocked without repeated API calls. OpenCode pairs were blocked because it is absent from the ordinary PATH. The isolated OpenCode binary was used for parser validation only. **No heterogeneous pair is claimed live-verified yet.**
 
 The lab supports `--worker` and `--reviewer` for all three harnesses (`claude` remains an alias for `claude-code`). Scripted MCP mode is transport evidence only, even when harness names are passed. Each live invocation starts a new native session; the two worker invocations reuse a Durebak identity, not a native conversation.
 

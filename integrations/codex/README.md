@@ -14,3 +14,7 @@ The output is a TOML configuration fragment. For an isolated CLI profile, place 
 See [compatibility](../../docs/COMPATIBILITY.md) for evidence and limits. Runtime configuration is independent of the optional [shared skill](../../plugins/durebak/skills/durebak/SKILL.md).
 
 Harness selection and live-test limitations: see [compatibility matrix](../../docs/COMPATIBILITY.md#heterogeneous-matrix). Use `--harness codex`; legacy flags remain compatible.
+
+## 세션 지침
+
+Codex는 시작 시 프로젝트의 [`AGENTS.md`](https://learn.chatgpt.com/docs/agent-configuration/agents-md)를 읽고, 연결한 MCP 서버의 초기화 `instructions`도 읽습니다. 두레박 서버는 공통 수신·답장 규칙을 이 초기화 필드와 도구 설명에 실어 보냅니다. 선택적 두레박 스킬은 긴 절차가 필요할 때 사용합니다. 세 경로 모두 다른 세션의 메시지 본문에 사용자 승인 권한을 부여하지 않습니다. 실제 메시지 처리 순서는 [사용법](../../docs/USAGE.md#받은-요청의-처리)을 따르세요.
