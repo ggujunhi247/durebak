@@ -206,4 +206,4 @@ node dist/cli.js setup --host opencode --session /absolute/private/session.json 
 
 ## CLI 입력 오류
 
-개발 브랜치에서 알 수 없는 명령은 `unknown_command`, `call --json` 또는 `--input`의 잘못된 JSON은 `invalid_json`을 반환합니다. 입력 본문은 오류 출력에 포함하지 않습니다. 올바른 명령은 `--help`에서 확인하고 JSON 파일은 표준 JSON 문법으로 작성하세요. 이 오류 안내 개선은 기존 alpha.1 태그 이후 변경입니다.
+알 수 없는 명령은 `unknown_command`, `call --json` 또는 `--input`의 잘못된 JSON은 `invalid_json`을 반환합니다. 입력 본문은 오류 출력에 포함하지 않습니다. 올바른 명령은 `--help`에서 확인하고 JSON 파일은 표준 JSON 문법으로 작성하세요.

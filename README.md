@@ -6,11 +6,22 @@ Local, durable collaboration between coding-agent sessions. Experimental alpha f
 
 두레박은 같은 컴퓨터의 코딩 에이전트 세션이 메시지·작업·결과를 주고받는 로컬 협업 런타임입니다. 각 세션은 자기 호스트와 맥락을 유지하고, CLI 또는 MCP로 참여합니다.
 
-**현재 버전: 0.1.0-alpha.1, Cooperative 모드.** SQLite 저장소, 인증된 loopback 서버, CLI, MCP stdio bridge가 구현되어 있습니다. 실제 MCP 프로세스 간 통신을 테스트했으며, 호스트별 실제 시험 결과와 제약은 [호스트 테스트](docs/HOST-TESTING.md)에 기록합니다. 자동 세션 실행·깨우기와 반복 작업 스케줄러는 후속 기능입니다.
+**현재 버전: 0.1.0-alpha.2, Cooperative 모드.** SQLite 저장소, 인증된 loopback 서버, CLI, MCP stdio bridge가 구현되어 있습니다. 실제 MCP 프로세스 간 통신을 테스트했으며, 호스트별 실제 시험 결과와 제약은 [호스트 테스트](docs/HOST-TESTING.md)에 기록합니다. 자동 세션 실행·깨우기와 반복 작업 스케줄러는 후속 기능입니다.
 
 ## 시작하기
 
 Node.js 24 이상과 npm이 필요합니다.
+
+`npx`로 alpha 버전을 실행할 수 있습니다.
+
+```sh
+npx --yes durebak@alpha --help
+npx --yes durebak@alpha serve
+```
+
+재현 가능한 설치에는 `durebak@0.1.0-alpha.2`처럼 정확한 버전을 지정하세요. 서버는 foreground에서 실행하며 Ctrl-C로 종료합니다.
+
+`git`에서 직접 실행하려면:
 
 ```sh
 git clone https://github.com/ggujunhi247/durebak.git
@@ -21,7 +32,7 @@ node dist/cli.js --help
 node dist/cli.js serve
 ```
 
-세션 등록, MCP 연결, 요청·답변과 결과 제출은 [사용법](docs/USAGE.md)을 따릅니다. 서버는 foreground에서 실행하며 Ctrl-C로 종료합니다. 새 설치는 사용자 홈의 `~/.durebak`에 데이터를 보관합니다. 기존 데이터 위치와 명시적인 경로 설정은 유지합니다. `register`와 `export`에서 `--out`을 생략하면 인증 파일과 기록도 같은 데이터 디렉터리에 저장됩니다. `node dist/cli.js paths`로 실제 위치를 확인할 수 있습니다.
+세션 등록, MCP 연결, 요청·답변과 결과 제출은 [사용법](docs/USAGE.md)을 따릅니다. 새 설치는 사용자 홈의 `~/.durebak`에 데이터를 보관합니다. 기존 데이터 위치와 명시적인 경로 설정은 유지합니다. `register`와 `export`에서 `--out`을 생략하면 인증 파일과 기록도 같은 데이터 디렉터리에 저장됩니다. `npx --yes durebak@alpha paths`로 실제 위치를 확인할 수 있습니다.
 
 ## 검증 상태
 
