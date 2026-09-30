@@ -55,25 +55,10 @@ Claude의 `auth status`에 loggedIn=true가 표시되어도 실제 API에서 OAu
 
 보고서의 usage는 해당 실행의 공급자 원본 수치다. 앞선 진단·재실행 사용량을 합산한 총비용이 아니며 cache-read 값을 input total에 다시 더하지 않는다. 도구 오류 후 회복된 경우 경고를 보존하고 최종 저장 증거가 모두 충족된 경우에만 통과한다.
 
-## 2026-09-29 실제 실행 결과
+## 확인된 범위
 
-- macOS / Node 26.8.1 / Codex CLI 0.146.0: `--reviewer codex`로 실제 모델 호출 3회, MCP 도구 호출 10회, 저장 증거 검사 11개 통과. 마지막 실행에서는 도구 오류·경고가 없었다. 약 57초 소요.
-- Claude Code 2.1.87: 로컬 로그인 기록은 감지됐으나 API OAuth 토큰 만료(401), refresh 실패로 cross-provider 완료 검증은 막혔다. MCP 없는 최소 호출에서도 같은 오류를 확인했다.
-- OpenCode: 현재 환경 미설치, 실행하지 않았다.
-- 자동 회귀 테스트와 모델 없는 `lab`은 호스트 인증 없이 실행 가능하다.
+Codex CLI 0.146.0의 Codex↔Codex 시험에서 호스트 호출 3회, MCP 도구 호출 10개와 DB 증거 검사 11개를 통과했습니다. Claude Code는 인증 실패, OpenCode는 실제 모델 시험 환경 미비로 이종 통신 성공을 주장하지 않습니다. 설치·파서 검증과 실제 모델 왕복을 구분합니다.
 
-[Codex 실제 실행 보고서](testing/2026-09-29-codex-live.json) · [Claude 인증 차단 근거](testing/2026-09-29-claude-blocker.json)
+일반 메시지는 호스트 밖에서 큐의 전달 가능 시점을 기다립니다. 수신 모델은 `receive`의 id·receipt로 `ack`하며, 답변은 `replyTo`로 원 요청과 연결합니다. 모델을 대기 polling에 사용하거나 긴급 표시로 시험 대기를 우회하지 않습니다.
 
-## 큐 정책 적용 이후
-
-호스트 실험은 기본 normal 메시지를 보내고 호스트 밖의 queue_status 대기로 전달 가능 시점을 확인한다. 모델은 receive로 메시지를 가져온 직후 반환된 id·receipt로 ack한다. 긴급 표시로 테스트 대기를 우회하지 않는다. 기존 docs/testing 보고서는 큐 정책 도입 전 실험 기록이다.
-
-큐 적용 후 실제 Codex↔Codex 검증도 통과했다: 호스트 호출 3회, MCP 도구 호출 10개, DB 증거 11개, 약 61초. 일반 메시지는 호스트 밖에서 기다렸고 모델을 대기 polling에 사용하지 않았다. [비민감 결과 보고서](testing/2026-09-29-codex-queue-live.json)에 기록했다. 각 호출은 새 native 실행이며 자동 wake·native 세션 resume 또는 Claude/OpenCode 실연동 성공을 의미하지 않는다.
-
-## 연결 흐름
-
-작업자와 검토자는 서로 다른 두레박 credential을 받는다. 각 Codex 실행에는 자기 credential을 사용하는 stdio MCP bridge만 연결한다. `send`는 인증된 발신자와 지정 수신자에 대해 SQLite 큐에 저장하고, 호스트 밖의 대기가 끝난 뒤 상대 실행의 `receive`가 메시지를 가져간다. `ack`는 해당 전달 receipt로 확인하며 답변은 `replyTo`로 원 요청에 연결한다. 마지막 작업자 실행은 같은 두레박 identity로 답변을 받아 결과 artifact를 제출한다. 하네스는 대화 본문을 직접 실행 간 복사하는 대신 DB의 발신자·수신자·답변 연결을 검사한다. 합성 테스트의 기대 답변은 프롬프트에 주어지므로 이 시험은 독립 추론 능력보다 실제 통신 경로를 검증한다.
-
-## 병합 전 최종 실연동
-
-안정성 개선을 포함한 최신 코드로 Codex CLI 0.146.0을 3회 실행했다. 두레박 도구 10개 호출과 DB 증거 11개 모두 통과했고 경고는 없었다. 약 71초가 걸렸다. [최종 실연동 보고서](testing/2026-09-29-codex-final-live.json)를 참고한다. 이 검증은 합성 메시지의 실제 전달 경로를 확인하며 같은 native 대화의 resume 검증은 아니다.
+호스트 호출마다 새 native 실행을 사용합니다. 같은 두레박 credential 재사용은 native 대화 재개를 뜻하지 않습니다. 합성 기대 답변은 프롬프트에 주어지므로 독립 추론 능력이 아닌 실제 통신 경로를 검증합니다.

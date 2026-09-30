@@ -37,12 +37,6 @@ SQLite schema 1을 2로 원자적으로 이관한다. 기존 read는 유지하�
 
 이 변경은 alpha API의 전달 계약 변경이다. 클라이언트는 send→inbox 대신 send→receive→ack(id,receipt)를 사용해야 한다. 일반 메시지를 계속 urgent로 바꿔 우회하지 않고, 호스트 밖의 대기 루프가 retry_after_ms를 이용한다. Provider 모델의 토큰 비용을 쓰지 않는 대기가 기본이다.
 
-## 검증
-
-2026-09-29: Node 24.21.0과 26.8.1에서 전체 30개 회귀 테스트 통과. 큐 전용 7개 테스트는 가상 시간으로 지연·우선순위·aging·quota·상태 보류·만료·receipt·5회 재전달·schema 1 이관을 확인한다. 독립 CLI/MCP 프로세스와 설치한 tarball의 기본 지연 수신, deterministic MCP lab의 DB 증거 11개를 확인했다.
-
-큐 적용 후 실제 Codex↔Codex 검증도 통과했다: 호스트 호출 3회, MCP 도구 호출 10개, DB 증거 11개, 약 61초. 일반 메시지는 호스트 밖에서 기다렸고 모델을 대기 polling에 사용하지 않았다. [비민감 결과 보고서](testing/2026-09-29-codex-queue-live.json)에 기록했다. 각 호출은 새 native 실행이며 자동 wake·native 세션 resume 또는 Claude/OpenCode 실연동 성공을 의미하지 않는다.
-
 ## 감사 커서 v2 (DB schema 3)
 
 inbox의 after/next는 최초 전달 순서 커서다. 메시지 seq는 저장 순서이므로 after로 사용하지 않는다. 응답 cursor_version=2를 확인하고 next를 그대로 저장한다. 기존 seq 기반 커서는 업그레이드 시 0으로 초기화하고 message id로 중복을 제거한다. 재전달은 최초 전달 기록을 중복 생성하지 않는다. 기존 DB의 전달 기록은 delivered_at·seq 순서로 이관하며 pending 메시지는 실제 전달 시 기록에 추가한다. 이전 DB에 같은 시각으로 기록된 전달의 정확한 내부 순서는 복원하지 못하므로 seq를 동률 기준으로 사용한다.
