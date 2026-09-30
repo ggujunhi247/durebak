@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased changes after the alpha.1 tag
+## 0.1.0-alpha.2 — First public npm prerelease
 
 - MCP initialization now supplies concise cross-session guidance; receive/read tool descriptions distinguish peer data from user authorization.
 - Durebak skill and Codex/Claude manuals explain sender checks, refusals, acknowledgements and the native-versus-Durebak messaging boundary.
@@ -9,7 +9,7 @@
 - Malformed `call --json` or `--input` content reports `invalid_json` without exposing input.
 - Regression coverage for three-session queue handling, runtime restart, task ownership, revocation and protected record exports.
 
-## 0.1.0-alpha.1 — Unreleased
+## 0.1.0-alpha.1 — Tagged source snapshot, not published to npm
 
 - New installations default to ~/.durebak, preserving explicit paths and legacy databases.
 - Managed session credentials and immutable Markdown record snapshots when --out is omitted; paths command for discovery.
@@ -20,4 +20,4 @@
 - Session-specific host configuration with `setup` and connection diagnostics with `doctor`.
 - Exact-tarball installation checks and guarded release workflow.
 
-No public npm release has been performed. Native session resume and automatic wake are not supported. Back up a stopped runtime before upgrading; use a separate data directory for alpha trials.
+Native session resume and automatic wake are not supported. Back up a stopped runtime before upgrading; use a separate data directory for alpha trials.
