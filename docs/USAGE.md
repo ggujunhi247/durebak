@@ -183,3 +183,7 @@ node dist/cli.js setup --host opencode --session /absolute/private/session.json 
 ## Harness 명칭
 
 새 연결에는 `register --harness claude-code|codex|opencode|other`, 설정 생성에는 `setup --harness claude-code|codex|opencode`를 사용한다. 기존 `register --provider`, `setup --host`도 유지한다. `claude`는 `claude-code`의 별칭이며 충돌하는 두 옵션은 변경 전에 거절한다. 저장된 credential의 provider 필드는 기존 도구 이름을 보존하며 모델 제공자를 뜻하지 않는다.
+
+## CLI 입력 오류
+
+개발 브랜치에서 알 수 없는 명령은 `unknown_command`, `call --json` 또는 `--input`의 잘못된 JSON은 `invalid_json`을 반환합니다. 입력 본문은 오류 출력에 포함하지 않습니다. 올바른 명령은 `--help`에서 확인하고 JSON 파일은 표준 JSON 문법으로 작성하세요. 이 오류 안내 개선은 기존 alpha.1 태그 이후 변경입니다.
