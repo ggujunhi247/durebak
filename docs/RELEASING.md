@@ -34,3 +34,15 @@ For rollback, deprecate an affected version with a clear replacement rather than
 Official references: [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/), [npm distribution tags](https://docs.npmjs.com/cli/v11/commands/npm-dist-tag/).
 
 Workflow changes must also pass `actionlint` (CI pins 1.7.12 and verifies its archive checksum). YAML parsing alone does not validate GitHub event/input/job placement.
+
+## Resuming an interrupted first publication
+
+A successful website login is not proof of CLI authentication. Check `npm whoami --registry=https://registry.npmjs.org` before publishing. If the web login process fails, start a new `npm login --auth-type=web` and finish its CLI authorization; never copy credentials into issues or chat.
+
+If npm rejects publication because 2FA is required, configure 2FA in the account settings and complete any subsequent publish authorization directly through npm. Do not disable 2FA or create a bypass token to work around this gate. Authentication failure does not mean a version was published: inspect `npm view durebak@VERSION version` before retrying. A network timeout is ambiguous; verify registry state first.
+
+Retain the successful rehearsal's `release` artifact and its checksum. Revalidate the tag, main ancestry and tarball checksum before publishing that exact artifact. Never move an existing version tag to include later documentation edits. If product/package changes are needed, create a new version and rehearsal. After publication, download the registry tarball, compare it with the released artifact, and repeat the installed-package smoke test.
+
+## Repository controls
+
+Release tags matching `v*` are protected against updates and deletion. The GitHub `npm` environment requires repository-owner review and accepts workflow runs from `main`. Dispatch Release from `main` with the version tag supplied as its input. These GitHub controls do not configure npm trusted publishing; the npm package must separately trust this repository, `release.yml`, and environment `npm` before automated publication can work. The initial authenticated bootstrap is a separate path and does not establish OIDC provenance.
