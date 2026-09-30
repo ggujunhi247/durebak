@@ -29,6 +29,6 @@ Tests run real SQLite databases, loopback servers and MCP subprocesses in privat
 
 ## Public release preparation
 
-The npm name is a local identifier, not a confirmed namespace reservation. Apache-2.0 is selected; the public owner remains a release decision. No contribution license agreement or ownership transfer is implied. Do not push or publish without the repository owner's instruction.
+The npm name is a local identifier, not a confirmed namespace reservation. Apache-2.0 is selected and the public repository is `ggujunhi247/durebak`. No contribution license agreement or ownership transfer is implied. Do not push or publish without the repository owner's instruction.
 
 Before pushing, follow the [publication secret checks](SECURITY.md#publication-secret-checks), including installation of the local pre-push guard. Never upload raw scan reports.
