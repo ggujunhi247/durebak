@@ -23,7 +23,7 @@
 - 동일한 미해결 상태가 반복되거나 한도를 넘으면 needs_attention으로 전환한다.
 - 사용자 cancel 이후 새 라운드를 시작하지 않는다.
 
-실제 계약과 기본값은 [제품 스펙](../docs/superpowers/specs/2026-09-29-durebak-design.md)을 따른다.
+실제 계약과 기본값은 [구현 현황](../docs/IMPLEMENTATION.md)을 따른다.
 
 ## v0.3.0 스펙을 반영한 복구 정책
 

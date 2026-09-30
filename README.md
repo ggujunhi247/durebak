@@ -27,7 +27,7 @@ node dist/cli.js serve
 
 - 실제 Codex → Codex 요청·검토·결과 제출을 검증했습니다.
 - Claude Code·OpenCode 설정 어댑터와 6방향 시험 도구를 제공합니다. **이종 모델 간 실통신 성공은 아직 검증하지 못했습니다.**
-- Node 24·26 로컬 테스트 74개와 실제 MCP 프로세스 왕복 검사를 통과했습니다. [Linux·macOS 원격 CI](https://github.com/ggujunhi247/durebak/actions/runs/36610450906)에서도 테스트와 패키지 검사를 통과했습니다.
+- 자동 테스트와 실제 MCP 프로세스 왕복 검사를 통과했습니다. [Linux·macOS 원격 CI](https://github.com/ggujunhi247/durebak/actions/runs/36610450906)에서도 테스트와 패키지 검사를 통과했습니다.
 - 자동 세션 깨우기·네이티브 대화 재개·무인 반복 개선은 아직 지원하지 않습니다.
 
 자세한 버전과 제한은 [호환성](docs/COMPATIBILITY.md)을 확인하세요.
@@ -57,20 +57,18 @@ npm run lab
 
 실제 모델을 사용하는 시험은 `npm run lab:live`로 별도 실행합니다. 계정 사용량이 발생하며 기본 대상은 Codex와 Claude입니다.
 
-## 문서
+## 매뉴얼
 
-| 문서 | 내용 |
+| 목적 | 안내 |
 |---|---|
-| [사용법](docs/USAGE.md) | 실행, 세션 등록, MCP, CLI, 복구 |
-| [구현 현황](docs/IMPLEMENTATION.md) | 현재 계약과 미구현 항목 |
-| [보안 정책](SECURITY.md) | 권한 경계, credential, 공개 전 확인 |
-| [제품 스펙](docs/superpowers/specs/2026-09-29-durebak-design.md) | 전체 제품 목표와 수용 기준 |
-| [토큰·캐시·기록](docs/CONTEXT-CACHE-RECORDS.md) | 목표 설계; 실제 절감률은 미측정 |
-| [조사](docs/RESEARCH.md) | 유사 도구와 공식 문서 근거 |
-| [아키텍처](docs/ARCHITECTURE.md) | 현재 통신 계층과 계획된 실행 계층 |
-| [컨셉](docs/CONCEPT.md) | 이름과 제품 철학 |
-| [로드맵](docs/ROADMAP.md) | 후속 자동 협업 단계 |
-| [기여 안내](CONTRIBUTING.md) | 개발·테스트·공개 저장소 규칙 |
+| 설치·실행·메시지·기록·복구 | [사용법](docs/USAGE.md) |
+| 호스트 연결 | [Codex](integrations/codex/README.md) · [Claude Code](integrations/claude/README.md) · [OpenCode](integrations/opencode/README.md) |
+| 지원 환경과 한계 | [호환성](docs/COMPATIBILITY.md) |
+| 메시지 중요도·대기·수신 확인 | [큐 정책](docs/QUEUE-POLICY.md) |
+| credential·데이터 보호 | [보안 정책](SECURITY.md) |
+| 개발·테스트 | [기여 안내](CONTRIBUTING.md) · [구현 현황](docs/IMPLEMENTATION.md) · [구조](docs/ARCHITECTURE.md) |
+| 실제 호스트 시험 | [호스트 테스트](docs/HOST-TESTING.md) |
+| 릴리스 관리 | [배포 절차](docs/RELEASING.md) · [변경점](CHANGELOG.md) |
 
 ## 배포
 
@@ -79,7 +77,3 @@ npm run lab
 제품명은 **두레박**, 영문 브랜드와 CLI 식별자는 **Durebak / durebak**입니다.
 
 메시지 전달 정책: [큐·중요도·대기·확인 규칙](docs/QUEUE-POLICY.md). 새 클라이언트는 `receive`와 `ack(id,receipt)`를 사용한다.
-
-## 배포 준비
-
-현재 npm 미출판 alpha입니다. [호환성](docs/COMPATIBILITY.md), [배포 전략](docs/RELEASE-STRATEGY.md), [변경점](CHANGELOG.md)을 참고하세요. 호스트별 설치 안내: [Codex](integrations/codex/README.md) · [Claude](integrations/claude/README.md) · [OpenCode](integrations/opencode/README.md).
