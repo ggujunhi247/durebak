@@ -19,7 +19,7 @@ npx --yes durebak@alpha --help
 npx --yes durebak@alpha serve
 ```
 
-재현 가능한 설치에는 `durebak@0.1.0-alpha.2`처럼 정확한 버전을 지정하세요. 서버는 foreground에서 실행하며 Ctrl-C로 종료합니다.
+재현 가능한 설치에는 `durebak@0.1.0-alpha.2`처럼 정확한 버전을 지정하세요. npm 첫 게시가 `latest`도 이 실험 버전에 연결했으므로 버전 미지정 설치도 alpha.2를 선택합니다. 서버는 foreground에서 실행하며 Ctrl-C로 종료합니다.
 
 `git`에서 직접 실행하려면:
 
