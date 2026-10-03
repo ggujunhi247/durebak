@@ -162,13 +162,31 @@ jobs:
           node scripts/check-release.mjs --publish --tag "$RELEASE_TAG" --channel "$RELEASE_CHANNEL" --repository "$RELEASE_REPOSITORY"
           (cd release && sha256sum --check SHA256SUMS)
           node scripts/check-package.mjs --tarball "$(find release -name '*.tgz')"
-          npm publish "$(find release -name '*.tgz')" --access public --tag "$RELEASE_CHANNEL" --provenance
-      - name: Create GitHub release
+          node scripts/publish-release.mjs --tarball "$(find release -name '*.tgz')" --channel "$RELEASE_CHANNEL"
+          node scripts/smoke-package.mjs --tarball "$(find release -name '*.tgz')"
+      - name: Create or verify GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
           RELEASE_CHANNEL: ${{ inputs.channel }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
         run: |
           args=()
           if [ "$RELEASE_CHANNEL" != latest ]; then args+=(--prerelease); fi
-          gh release create "$RELEASE_TAG" release/* --verify-tag --title "$RELEASE_TAG" --notes-file CHANGELOG.md "${args[@]}"
+          if gh api "repos/$RELEASE_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/existing-release.json" 2> "$RUNNER_TEMP/release-error"; then
+            mkdir -p "$RUNNER_TEMP/existing-assets"
+            gh release download "$RELEASE_TAG" --dir "$RUNNER_TEMP/existing-assets"
+            for asset in release/*; do
+              name="$(basename "$asset")"
+              if [ -f "$RUNNER_TEMP/existing-assets/$name" ]; then
+                cmp "$asset" "$RUNNER_TEMP/existing-assets/$name"
+              else
+                gh release upload "$RELEASE_TAG" "$asset"
+              fi
+            done
+          elif [[ "$(cat "$RUNNER_TEMP/release-error")" == *"(HTTP 404)"* ]]; then
+            gh release create "$RELEASE_TAG" release/* --verify-tag --title "$RELEASE_TAG" --notes-file CHANGELOG.md "${args[@]}"
+          else
+            cat "$RUNNER_TEMP/release-error" >&2
+            exit 1
+          fi
