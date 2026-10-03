@@ -6,7 +6,7 @@ Local, durable collaboration between coding-agent sessions. Experimental alpha f
 
 두레박은 같은 컴퓨터의 코딩 에이전트 세션이 메시지·작업·결과를 주고받는 로컬 협업 런타임입니다. 각 세션은 자기 호스트와 맥락을 유지하고, CLI 또는 MCP로 참여합니다.
 
-**현재 버전: 0.1.0-alpha.2, Cooperative 모드.** SQLite 저장소, 인증된 loopback 서버, CLI, MCP stdio bridge가 구현되어 있습니다. 실제 MCP 프로세스 간 통신을 테스트했으며, 호스트별 실제 시험 결과와 제약은 [호스트 테스트](docs/HOST-TESTING.md)에 기록합니다. 자동 세션 실행·깨우기와 반복 작업 스케줄러는 후속 기능입니다.
+**현재 버전: 0.1.0-alpha.3, Cooperative 모드.** SQLite 저장소, 인증된 loopback 서버, CLI, MCP stdio bridge가 구현되어 있습니다. 실제 MCP 프로세스 간 통신을 테스트했으며, 호스트별 실제 시험 결과와 제약은 [호스트 테스트](docs/HOST-TESTING.md)에 기록합니다. 자동 세션 실행·깨우기와 반복 작업 스케줄러는 후속 기능입니다.
 
 ## 시작하기
 
@@ -19,7 +19,7 @@ npx --yes durebak@alpha --help
 npx --yes durebak@alpha serve
 ```
 
-재현 가능한 설치에는 `durebak@0.1.0-alpha.2`처럼 정확한 버전을 지정하세요. npm 첫 게시가 `latest`도 이 실험 버전에 연결했으므로 버전 미지정 설치도 alpha.2를 선택합니다. 서버는 foreground에서 실행하며 Ctrl-C로 종료합니다.
+재현 가능한 설치에는 `durebak@0.1.0-alpha.3`처럼 정확한 버전을 지정하세요. npm 첫 게시가 `latest`도 이 실험 버전에 연결했으므로 버전 미지정 설치도 alpha.2를 선택합니다. 서버는 foreground에서 실행하며 Ctrl-C로 종료합니다.
 
 `git`에서 직접 실행하려면:
 

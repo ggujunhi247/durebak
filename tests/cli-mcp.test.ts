@@ -111,3 +111,26 @@ test('an explicitly empty output path is rejected instead of selecting managed s
   const runtime=await startRuntime(data);t.after(async()=>{await runtime.close();rmSync(dir,{recursive:true,force:true});});
   await assert.rejects(run('register','--data-dir',data,'--workspace',dir,'--alias','empty-out','--harness','codex','--out',''),/missing_out/);
 });
+
+test('MCP timer observes two bridges without model calls and one close preserves the other',async t=>{
+ const {adminCall,request}=await import('../src/client.js');const root=mkdtempSync(join(tmpdir(),'durebak-mcp-health-'));const data=join(root,'data');const runtime=await startRuntime(data);
+ const registered:any=await adminCall(data,'/v1/register',{workspace:'w',alias:'a',provider:'codex'});const file=join(root,'identity');writeFileSync(file,JSON.stringify({data_dir:data,...registered}),{mode:0o600});
+ const clients:Client[]=[];t.after(async()=>{for(const c of clients)await c.close();await runtime.close();rmSync(root,{recursive:true,force:true});});
+ for(let i=0;i<2;i++){const client=new Client({name:'health-fixture',version:'1'});clients.push(client);await client.connect(new StdioClientTransport({command:process.execPath,args:['--import','tsx',cli,'mcp','--session',file],stderr:'pipe'}));}
+ const health=async()=>await request(data,registered.token,'/v1/session',{operation:'session_health',args:{}}) as any;
+ const until=async(predicate:(h:any)=>boolean)=>{for(let i=0;i<100;i++){const h=await health();if(predicate(h))return h;await new Promise(r=>setTimeout(r,20));}assert.fail('health did not converge');};
+ const h=await until(h=>h.bridge.active_count===2);assert.equal(h.bridge.state,'fresh');assert.equal(h.bridge.duplicate,true);assert.equal(h.last_activity_at,null);
+ const tools=await clients[0]!.listTools();assert(!tools.tools.some(x=>x.name==='durebak_bridge_touch'||x.name==='durebak_bridge_close'));assert(tools.tools.some(x=>x.name==='durebak_session_health'));
+ await clients.shift()!.close();const one=await until(h=>h.bridge.active_count===1);assert.equal(one.bridge.state,'fresh');assert.equal(one.bridge.duplicate,false);
+});
+test('SIGINT and SIGTERM retire bridge observations without leaving a process running',async t=>{
+ const {adminCall,request}=await import('../src/client.js');const root=mkdtempSync(join(tmpdir(),'durebak-mcp-signals-'));const data=join(root,'data');const runtime=await startRuntime(data);
+ const a:any=await adminCall(data,'/v1/register',{workspace:'w',alias:'a',provider:'codex'});const file=join(root,'identity');writeFileSync(file,JSON.stringify({data_dir:data,...a}),{mode:0o600});
+ const clients:Client[]=[];t.after(async()=>{for(const c of clients)await c.close();await runtime.close();rmSync(root,{recursive:true,force:true});});
+ const health=async()=>await request(data,a.token,'/v1/session',{operation:'session_health',args:{}}) as any;
+ const until=async(predicate:(h:any)=>boolean)=>{for(let i=0;i<100;i++){const h=await health();if(predicate(h))return;await new Promise(r=>setTimeout(r,20));}assert.fail('signal cleanup did not converge');};
+ for(const signal of ['SIGINT','SIGTERM'] as const){
+  const transport=new StdioClientTransport({command:process.execPath,args:['--import','tsx',cli,'mcp','--session',file],stderr:'pipe'});const c=new Client({name:'signal-fixture',version:'1'});clients.push(c);await c.connect(transport);await until(h=>h.bridge.active_count===1);
+  const pid=transport.pid!;process.kill(pid,signal);await until(h=>h.bridge.active_count===0);await c.close();assert.throws(()=>process.kill(pid,0),/ESRCH/);
+ }
+});

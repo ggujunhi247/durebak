@@ -12,13 +12,13 @@ export function privateJson(path: string): unknown {
 }
 const credentialSchema = z.object({ data_dir: z.string(), token: z.string().regex(/^[a-f0-9]{64}$/), session: z.object({ id:z.string(), workspace:z.string(), alias:z.string(), provider:z.string() }).passthrough() }).strict();
 export function credential(path: string) { return credentialSchema.parse(privateJson(path)); }
-export async function request(directory: string, token: string, path: string, payload: unknown): Promise<unknown> {
+export async function request(directory: string, token: string, path: string, payload: unknown, options?: { timeoutMs?: number }): Promise<unknown> {
   const connection = z.object({ url: z.string(), instance: z.string() }).parse(privateJson(join(directory, 'connection.json')));
   const url = new URL(connection.url);
   if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !url.port || url.username || url.password || url.pathname !== '/' || url.search || url.hash) fail('unsafe_endpoint');
   const text = JSON.stringify(payload);
   if (Buffer.byteLength(text) > 131072) fail('request_too_large');
-  const response = await fetch(new URL(path, url), { method:'POST', headers:{ authorization:`Bearer ${token}`, 'content-type':'application/json' }, body:text, redirect:'error', signal:AbortSignal.timeout(15000) });
+  const response = await fetch(new URL(path, url), { method:'POST', headers:{ authorization:`Bearer ${token}`, 'content-type':'application/json' }, body:text, redirect:'error', signal:AbortSignal.timeout(options?.timeoutMs ?? 15000) });
   let resultText = ''; let size = 0;
   const reader = response.body?.getReader();
   if (!reader) fail('empty_response');

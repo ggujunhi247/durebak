@@ -2,6 +2,7 @@ import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { fail, hash, short, body, sendSchema, taskSchema, type Session, type Message, type QueuedMessage, type Task } from './domain.js';
+import { bridgeHealth, type BridgeObservation, type SessionHealth } from './health.js';
 import { openDatabase } from './database.js';
 import { transaction } from './transactions.js';
 import { encodedPreview, preview, range } from './content.js';
@@ -48,6 +49,32 @@ export class Store {
     const rows = this.all<Session>('SELECT id,workspace,alias,provider,revoked FROM sessions WHERE workspace=? AND revoked=0 AND id>? ORDER BY id LIMIT ?', actor.workspace, after, limit+1);
     const items = rows.slice(0,limit);
     return { items, next:items.at(-1)?.id ?? after, has_more:rows.length>limit };
+  }
+  bridgeTouch(actor: Session, instance: string, epoch: string): {recorded:true} {
+    z.string().uuid().parse(instance); z.string().regex(/^[a-f0-9]{32}$/).parse(epoch);
+    return this.transaction(() => {
+      const now=this.clock.now();
+      const exists=this.one('SELECT instance FROM bridge_observations WHERE session_id=? AND instance=?',actor.id,instance);
+      this.run('DELETE FROM bridge_observations WHERE session_id=? AND instance<>? AND (epoch<>? OR closed=1 OR last_seen_ms<=? OR last_seen_ms>?)',actor.id,instance,epoch,now-60000,now);
+      if(!exists&&this.one<{n:number}>('SELECT count(*) n FROM bridge_observations WHERE session_id=?',actor.id)!.n>=20)fail('bridge_capacity_exceeded');
+      this.run('INSERT INTO bridge_observations(session_id,instance,epoch,last_seen_ms,closed) VALUES(?,?,?,?,0) ON CONFLICT(session_id,instance) DO UPDATE SET epoch=excluded.epoch,last_seen_ms=excluded.last_seen_ms,closed=0',actor.id,instance,epoch,now);
+      return {recorded:true};
+    });
+  }
+  bridgeClose(actor: Session, instance: string, epoch: string): {closed:true} {
+    z.string().uuid().parse(instance); z.string().regex(/^[a-f0-9]{32}$/).parse(epoch);
+    this.run('UPDATE bridge_observations SET closed=1 WHERE session_id=? AND instance=? AND epoch=?',actor.id,instance,epoch);
+    return {closed:true};
+  }
+  activityTouch(actor: Session): void {
+    this.run('INSERT INTO session_activity(session_id,last_activity_ms) VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET last_activity_ms=excluded.last_activity_ms',actor.id,this.clock.now());
+  }
+  sessionHealth(actor: Session,id: string,epoch: string): SessionHealth {
+    const session=this.one<{availability:SessionHealth['availability']}>('SELECT availability FROM sessions WHERE id=? AND workspace=? AND revoked=0',id,actor.workspace);
+    if(!session)fail('not_found');
+    const rows=this.all<Omit<BridgeObservation,'closed'>&{closed:number}>('SELECT instance,epoch,last_seen_ms,closed FROM bridge_observations WHERE session_id=?',id);
+    const activity=this.one<{last_activity_ms:number}>('SELECT last_activity_ms FROM session_activity WHERE session_id=?',id);
+    return {session_id:id,bridge:bridgeHealth(rows.map(x=>({...x,closed:!!x.closed})),epoch,this.clock.now()),last_activity_at:activity?.last_activity_ms??null,availability:session.availability,host:'unknown',readiness:'unknown',progress:'unknown',auto_wake:false};
   }
   send(actor: Session, input: z.input<typeof sendSchema>): Message {
     const data = sendSchema.parse(input);
