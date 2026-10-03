@@ -207,3 +207,21 @@ node dist/cli.js setup --host opencode --session /absolute/private/session.json 
 ## CLI 입력 오류
 
 알 수 없는 명령은 `unknown_command`, `call --json` 또는 `--input`의 잘못된 JSON은 `invalid_json`을 반환합니다. 입력 본문은 오류 출력에 포함하지 않습니다. 올바른 명령은 `--help`에서 확인하고 JSON 파일은 표준 JSON 문법으로 작성하세요.
+
+## 도구 기능 근거와 연결 상태 조회
+
+```sh
+node dist/cli.js harnesses
+node dist/cli.js doctor --session /absolute/path/to/private/builder.json
+node dist/cli.js call session_health --session /absolute/path/to/private/builder.json --json '{}'
+```
+
+`harnesses`는 credential·daemon·호스트 실행 없이 JSON catalog를 반환한다. `status`는 기능에 대한 근거, `enabled`는 현재 adapter의 가용성이다. Grok Build·Antigravity CLI·Gemini CLI·Cursor Agent·Copilot CLI는 research_candidate이며 등록·설정·자동 실행은 활성화하지 않는다. documented는 실제 호스트 검증이 아니다. 기존 세 도구의 mcp enabled도 설정 renderer 가용성을 뜻하며 Managed 실행을 의미하지 않는다.
+
+`doctor`는 기존 ok/code에 검사별 status·reason_code·action을 추가한다. 정상 ready는 두레박 연결 준비 상태이며 호스트 인증이나 모델 응답을 증명하지 않는다. 새 runtime에서는 자기 session_health도 포함한다.
+
+MCP bridge는 시작 시와 성공 후 10초 간격으로 접촉을 기록한다. 현재 daemon의 열린 bridge 접촉이 30초 미만이면 fresh, 30~60초는 stale, 60초 이상은 offline이다. 현재 daemon의 접촉이 없으면 unknown이다. 여러 bridge 중 하나가 끊겨도 나머지 관측은 유지한다. 연결 실패는 최대 60초 backoff, 인증 회수는 heartbeat를 멈춘다. 내부 접촉 연산은 모델 도구 목록에 노출하지 않는다.
+
+일반 세션 작업 호출의 last_activity_at과 선언된 available/busy/paused는 별도다. 상태·세션 목록·진단 조회는 접촉을 갱신하지 않는다. fresh+paused는 연결 관측은 최근이지만 전달은 보류된 상태다. host/readiness/progress는 unknown, auto_wake는 false이며 이 기능은 native 세션을 깨우거나 재개하지 않는다. schema 3 데이터는 새 migration으로 보존하며 이전 daemon 접촉을 새 연결로 간주하지 않는다.
+
+setup 출력의 scope=config_fragment는 설정 파일 조각의 생성 범위다. isolation_evidence=renderer_tested와 native_session_isolation=unverified를 함께 반환한다. 서로 다른 credential을 가진 설정 생성 시험은 실제 호스트의 설정 discovery·native 세션 격리를 증명하지 않는다. 공통 global/project 설정에 하나의 credential을 넣어 여러 세션이 identity를 공유하지 않도록 호스트별 연결 범위를 확인한다.

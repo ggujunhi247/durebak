@@ -16,7 +16,8 @@ test('setup preserves per-session identity and private paths without embedding t
   const registered:any=await adminCall(data,'/v1/register',{workspace:'w',alias,provider:'codex'});
   const file=join(root,`session-${alias}.json`);writeFileSync(file,JSON.stringify({data_dir:data,...registered}),{mode:0o600});
   for(const host of ['codex','claude','opencode']as const){
-   const out=join(root,`${host}-${alias}.config`);createSetup(host,file,out);
+   const out=join(root,`${host}-${alias}.config`);const setup=createSetup(host,file,out);
+   assert.equal(setup.scope,'config_fragment');assert.equal(setup.native_session_isolation,'unverified');assert.equal(setup.isolation_evidence,'renderer_tested');
    const text=readFileSync(out,'utf8');assert.ok(text.includes(file));assert.ok(!text.includes(registered.token));assert.equal(statSync(out).mode&0o777,0o600);
    assert.throws(()=>createSetup(host,file,out),/EEXIST/);
    if(host==='claude')assert.deepEqual(JSON.parse(text).mcpServers.durebak.args.slice(-2),['--session',realpathSync(file)]);
@@ -59,4 +60,14 @@ test('doctor rejects mismatched protocol, schema, identity and version without l
   [{session_id:'session-b'},'identity_mismatch'],[{version:'0.0.0'},'version_mismatch'],
  ]as const){payload={...expected,...overrides};const result=await doctor(file);assert.equal(result.code,code);assert.ok(!JSON.stringify(result).includes(token));}
  payload={};assert.equal((await doctor(file)).code,'incompatible_runtime');
+});
+test('doctor preserves legacy codes and adds non-sensitive actionable checks',async t=>{
+ const root=mkdtempSync(join(tmpdir(),'durebak-doctor-checks-'));const data=join(root,'data');const runtime=await startRuntime(data);t.after(async()=>{await runtime.close();rmSync(root,{recursive:true,force:true});});
+ const missing=await doctor(join(root,'missing'));assert.equal(missing.code,'credential_unavailable');assert(missing.checks.some(x=>x.name==='credential'&&x.status==='fail'&&x.action.length>0));
+ const a:any=await adminCall(data,'/v1/register',{workspace:'w',alias:'a',provider:'codex'});const file=join(root,'session');writeFileSync(file,JSON.stringify({data_dir:data,...a}),{mode:0o600});
+ const {request}=await import('../src/client.js');const {randomUUID}=await import('node:crypto');const call=async(operation:string,args:unknown={})=>await request(data,a.token,'/v1/session',{operation,args}) as any;
+ const info=await call('runtime_info');await call('bridge_touch',{instance:randomUUID(),epoch:info.daemon_epoch});await call('session_state',{state:'paused'});
+ const ready=await doctor(file);assert.equal(ready.code,'ready');assert.equal(ready.ok,true);assert.equal(ready.health?.bridge.state,'fresh');assert.equal(ready.health?.availability,'paused');assert.equal(ready.health?.readiness,'unknown');assert.equal(ready.health?.auto_wake,false);assert(ready.checks.some(x=>x.name==='bridge'&&x.status==='pass'));assert(ready.checks.every(x=>x.action&&x.reason_code));
+ assert(!JSON.stringify(ready).includes(root));assert(!JSON.stringify(ready).includes(a.token));
+ await adminCall(data,'/v1/revoke',{id:a.session.id});const revoked=await doctor(file);assert.equal(revoked.code,'unauthorized');assert.equal(revoked.ok,false);assert.equal(revoked.health,undefined);
 });

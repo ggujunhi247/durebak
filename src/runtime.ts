@@ -17,6 +17,9 @@ const taskVersion = z.object({ id: identifier, version: z.number().int().positiv
 const empty = z.object({}).strict();
 export const operations = {
   runtime_info: empty,
+  bridge_touch: z.object({instance:z.string().uuid(),epoch:z.string().regex(/^[a-f0-9]{32}$/)}).strict(),
+  bridge_close: z.object({instance:z.string().uuid(),epoch:z.string().regex(/^[a-f0-9]{32}$/)}).strict(),
+  session_health: z.object({id:identifier.optional()}).strict(),
   sessions: z.object({ after:z.string().max(200).default(''), limit:z.number().int().min(1).max(20).default(10) }).strict(),
   send: sendSchema,
   inbox: page,
@@ -40,10 +43,13 @@ export const operations = {
 };
 export type Operation = keyof typeof operations;
 
-function dispatch(store: Store, actor: Session, operation: Operation, input: unknown): unknown {
+function dispatch(store: Store, actor: Session, operation: Operation, input: unknown, epoch: string): unknown {
   // Each branch parses at the trust boundary before entering the store.
   switch (operation) {
-    case 'runtime_info': empty.parse(input); return { version, protocol_version: protocolVersion, schema_version: schemaVersion, session_id: actor.id };
+    case 'runtime_info': empty.parse(input); return { version, protocol_version: protocolVersion, schema_version: schemaVersion, session_id: actor.id, daemon_epoch: epoch, capabilities:['session_health_v1'] };
+    case 'session_health': {const a=operations.session_health.parse(input);return store.sessionHealth(actor,a.id??actor.id,epoch);}
+    case 'bridge_touch': {const a=operations.bridge_touch.parse(input);if(a.epoch!==epoch)fail('daemon_epoch_mismatch');return store.bridgeTouch(actor,a.instance,epoch);}
+    case 'bridge_close': {const a=operations.bridge_close.parse(input);if(a.epoch!==epoch)fail('daemon_epoch_mismatch');return store.bridgeClose(actor,a.instance,epoch);}
     case 'sessions': { const a = operations.sessions.parse(input); return { ...store.sessions(actor,a.after,a.limit), mode:'cooperative', auto_wake:false }; }
     case 'send': { const result = store.send(actor, operations.send.parse(input)); return { id: result.id, seq: result.seq, status: result.status, reply_to: result.reply_to }; }
     case 'inbox': { const a = operations.inbox.parse(input); return store.inbox(actor, a.after, a.limit); }
@@ -119,7 +125,8 @@ export async function startRuntime(directory: string) {
       const actor = store.authenticate(token);
       if (!actor) { respond(res, 401, { error: 'unauthorized' }); return; }
       const input = z.object({ operation: z.enum(Object.keys(operations) as [Operation, ...Operation[]]), args: z.unknown() }).strict().parse(body);
-      respond(res, 200, dispatch(store, actor, input.operation, input.args));
+      if (!['runtime_info','sessions','session_health','bridge_touch','bridge_close','events'].includes(input.operation)) store.activityTouch(actor);
+      respond(res, 200, dispatch(store, actor, input.operation, input.args, instance));
     } catch (error) {
       const code = error instanceof DomainError ? error.code : error instanceof z.ZodError ? 'invalid_input' : 'internal_error';
       const status = code === 'internal_error' ? 500 : code === 'request_too_large' ? 413 : code === 'not_found' ? 404 : code.endsWith('conflict') || code === 'inbox_full' || code === 'alias_exists' ? 409 : 400;

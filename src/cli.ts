@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { resolveHarness, legacyProvider } from './harnesses/registry.js';
+import { harnessCatalog } from './harnesses/catalog.js';
 import { version } from './version.js';
 import { createSetup } from './setup.js';
 import { doctor } from './doctor.js';
@@ -16,6 +17,7 @@ import { storagePaths, managedCredentialPath, managedRecordPath } from './paths.
 
 const help = `Durebak ${version} — local cooperative session bus
 
+  durebak harnesses                              Read harness capability evidence (no host execution)
   durebak serve [--data-dir PATH]                  Run loopback daemon in foreground
   durebak register --workspace PATH --alias NAME --harness codex|claude-code|opencode|other [--out FILE] [--data-dir PATH]
   durebak revoke SESSION_ID [--data-dir PATH]      Revoke a session credential
@@ -43,6 +45,7 @@ async function main() {
   const command = positionals[0];
   if (values.version) { process.stdout.write(version+'\n'); return; }
   if (values.help || !command) { process.stdout.write(help); return; }
+  if (command === 'harnesses') { output(harnessCatalog()); return; }
   const selectedDirectory = () => dataDirectory(values['data-dir']);
   if (command === 'paths') {
     const session = values.session ?? process.env.DUREBAK_SESSION_FILE;

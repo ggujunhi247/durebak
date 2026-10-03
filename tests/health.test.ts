@@ -1,0 +1,61 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {randomUUID} from 'node:crypto';
+import {bridgeHealth} from '../src/health.js';
+import {Store} from '../src/store.js';
+const epoch='a'.repeat(32);
+test('bridge boundary and clock rollback never infer native readiness',()=>{
+ const rows=[{instance:'one',epoch,last_seen_ms:100000,closed:false}];
+ for(const [now,state] of [[129999,'fresh'],[130000,'stale'],[159999,'stale'],[160000,'offline'],[99999,'unknown']] as const)assert.equal(bridgeHealth(rows,epoch,now).state,state);
+ assert.equal(bridgeHealth(rows,'b'.repeat(32),100000).state,'unknown');
+ rows.push({instance:'two',epoch,last_seen_ms:100000,closed:false});assert.equal(bridgeHealth(rows,epoch,100000).duplicate,true);
+ rows[0]!.closed=true;assert.equal(bridgeHealth(rows,epoch,100000).state,'fresh');assert.equal(bridgeHealth(rows,epoch,100000).active_count,1);
+ rows[1]!.closed=true;assert.equal(bridgeHealth(rows,epoch,100000).state,'offline');
+});
+test('observations are bounded scoped read-only and survive reopen without epoch freshness',t=>{
+ const root=mkdtempSync(join(tmpdir(),'durebak-health-'));let now=100000;let s=new Store(root,{now:()=>now});t.after(()=>{s.close();rmSync(root,{recursive:true,force:true});});
+ const a=s.register('w','a','codex').session,b=s.register('other','b','claude').session;
+ assert.equal(s.sessionHealth(a,a.id,epoch).bridge.state,'unknown');
+ const instances=Array.from({length:20},()=>randomUUID());for(const i of instances)s.bridgeTouch(a,i,epoch);
+ assert.throws(()=>s.bridgeTouch(a,randomUUID(),epoch),/bridge_capacity_exceeded/);
+ s.bridgeTouch(a,instances[0]!,epoch);s.bridgeClose(b,instances[0]!,epoch);
+ assert.equal(s.sessionHealth(a,a.id,epoch).bridge.active_count,20);assert.throws(()=>s.sessionHealth(a,b.id,epoch),/not_found/);
+ s.bridgeClose(a,instances[0]!,epoch);s.bridgeTouch(a,randomUUID(),epoch);
+ now=130000;const before=s.sessionHealth(a,a.id,epoch);s.sessionHealth(a,a.id,epoch);assert.deepEqual(s.sessionHealth(a,a.id,epoch),before);
+ s.activityTouch(a);assert.equal(s.sessionHealth(a,a.id,epoch).bridge.state,'stale');assert.equal(s.sessionHealth(a,a.id,epoch).last_activity_at,now);
+ assert.equal(before.host,'unknown');assert.equal(before.auto_wake,false);
+ s.close();s=new Store(root,{now:()=>now});assert.equal(s.sessionHealth(a,a.id,'b'.repeat(32)).bridge.state,'unknown');
+ now=160000;s.bridgeTouch(a,randomUUID(),epoch);assert.equal(s.sessionHealth(a,a.id,epoch).bridge.active_count,1);
+});
+test('schema three migration preserves credentials messages tasks artifacts and audit',async t=>{
+ const {DatabaseSync}=await import('node:sqlite');const root=mkdtempSync(join(tmpdir(),'durebak-health-migrate-'));let s=new Store(root);t.after(()=>{s.close();rmSync(root,{recursive:true,force:true});});
+ const a=s.register('w','a','codex'),b=s.register('w','b','claude');const msg=s.send(a.session,{to:b.session.id,body:'keep',key:'m',priority:'urgent',urgentReason:'time sensitive fixture'});const receipt=s.receive(b.session).items[0]!;s.ack(b.session,msg.id,receipt.receipt);
+ const artifact=s.putArtifact(a.session,'keep artifact');const task=s.createTask(a.session,{title:'keep task',criteria:'keep criteria',key:'t'});s.close();
+ const db=new DatabaseSync(join(root,'runtime.sqlite'));db.exec('DROP TABLE bridge_observations; DROP TABLE session_activity; PRAGMA user_version=3;');db.close();s=new Store(root);
+ assert.equal(s.authenticate(a.token)?.id,a.session.id);assert.equal(s.inbox(b.session).items[0]!.id,msg.id);assert.equal(s.getTask(a.session,task.id).title,'keep task');assert.equal(s.readArtifact(a.session,artifact.hash).content,'keep artifact');
+ const check=new DatabaseSync(join(root,'runtime.sqlite'));assert.equal(check.prepare('PRAGMA user_version').get()!.user_version,4);assert.equal(check.prepare('SELECT message_id FROM delivery_audit WHERE recipient=?').get(b.session.id)!.message_id,msg.id);assert.equal(s.inbox(b.session,s.inbox(b.session).next).items.length,0);check.close();
+});
+test('HTTP health capability keeps reads inert and rejects epoch revoke and storage failures',async t=>{
+ const {startRuntime}=await import('../src/runtime.js');const {adminCall,request}=await import('../src/client.js');const {DatabaseSync}=await import('node:sqlite');
+ const root=mkdtempSync(join(tmpdir(),'durebak-health-http-'));const runtime=await startRuntime(root);t.after(async()=>{await runtime.close();rmSync(root,{recursive:true,force:true});});
+ const a:any=await adminCall(root,'/v1/register',{workspace:'w',alias:'a',provider:'codex'}),b:any=await adminCall(root,'/v1/register',{workspace:'w',alias:'b',provider:'codex'});
+ const call=async(op:string,args:unknown={})=>await request(root,a.token,'/v1/session',{operation:op,args}) as any;
+ const info=await call('runtime_info');assert(info.capabilities.includes('session_health_v1'));assert.match(info.daemon_epoch,/^[a-f0-9]{32}$/);
+ const instance=randomUUID();await call('bridge_touch',{instance,epoch:info.daemon_epoch});const before=await call('session_health');await call('sessions');await call('runtime_info');assert.deepEqual(await call('session_health'),before);
+ await call('queue_status');assert.equal((await call('session_health')).bridge.last_seen_at,before.bridge.last_seen_at);assert.equal(typeof (await call('session_health')).last_activity_at,'number');
+ await assert.rejects(call('bridge_touch',{instance,epoch:'b'.repeat(32)}),/daemon_epoch_mismatch/);await assert.rejects(call('bridge_touch',{instance:'bad',epoch:info.daemon_epoch}),/invalid_input/);
+ const db=new DatabaseSync(join(root,'runtime.sqlite'));
+ db.exec("CREATE TRIGGER block_touch BEFORE UPDATE ON bridge_observations BEGIN SELECT RAISE(ABORT,'fixture'); END;");await assert.rejects(call('bridge_touch',{instance,epoch:info.daemon_epoch}),/internal_error/);assert.equal((await call('session_health')).bridge.last_seen_at,before.bridge.last_seen_at);db.exec('DROP TRIGGER block_touch;');
+ db.exec("CREATE TRIGGER block_activity BEFORE UPDATE ON session_activity BEGIN SELECT RAISE(ABORT,'fixture'); END;");await assert.rejects(call('send',{to:b.session.id,body:'not created',key:'blocked'}),/internal_error/);assert.equal(db.prepare("SELECT count(*) n FROM messages WHERE key='blocked'").get()!.n,0);db.exec('DROP TRIGGER block_activity;');db.close();
+ await assert.rejects(call('send',{to:'missing',body:'rejected',key:'rejected'}),/not_found/);assert.equal(typeof (await call('session_health')).last_activity_at,'number');
+ await adminCall(root,'/v1/revoke',{id:a.session.id});await assert.rejects(call('bridge_touch',{instance,epoch:info.daemon_epoch}),/unauthorized/);
+});
+test('fresh contact after clock rollback is not masked by an abandoned future bridge',t=>{
+ const future={instance:'dead',epoch,last_seen_ms:200000,closed:false},live={instance:'live',epoch,last_seen_ms:100000,closed:false};
+ assert.equal(bridgeHealth([future,live],epoch,100000).state,'fresh');assert.equal(bridgeHealth([future,live],epoch,100000).active_count,1);
+ const root=mkdtempSync(join(tmpdir(),'durebak-health-clock-'));let now=200000;const store=new Store(root,{now:()=>now});t.after(()=>{store.close();rmSync(root,{recursive:true,force:true});});
+ const a=store.register('w','a','codex').session;store.bridgeTouch(a,randomUUID(),epoch);now=100000;const instance=randomUUID();store.bridgeTouch(a,instance,epoch);assert.equal(store.sessionHealth(a,a.id,epoch).bridge.state,'fresh');now=170000;store.bridgeTouch(a,instance,epoch);assert.equal(store.sessionHealth(a,a.id,epoch).bridge.active_count,1);
+});

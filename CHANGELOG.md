@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-alpha.3 — 2026-10-04
+
+- Add inactive harness research catalog and epoch-scoped MCP bridge health.
+- Keep bridge contact, CLI activity and declared availability distinct.
+- Add actionable doctor checks and schema 3→4 migration preserving original state.
+- Handle multi-bridge, clock rollback, reconnect, revocation and EOF/signal cleanup.
+- Clarify configuration fragments versus unverified native session isolation.
+- Preserve MCP peer-data instructions and managed local paths from alpha.2.
+
+Actual heterogeneous host execution and automatic native wake remain unverified.
+
 ## 0.1.0-alpha.2 — First public npm prerelease
 
 - MCP initialization now supplies concise cross-session guidance; receive/read tool descriptions distinguish peer data from user authorization.

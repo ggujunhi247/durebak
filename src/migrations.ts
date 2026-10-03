@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { fail } from './domain.js';
 import { transaction } from './transactions.js';
 
-export const schemaVersion = 3;
+export const schemaVersion = 4;
 
 // Preserve released migration SQL and append new versions at the end.
 export function migrate(db: DatabaseSync) {
@@ -73,6 +73,19 @@ export function migrate(db: DatabaseSync) {
           INSERT INTO delivery_audit(message_id,recipient)
             SELECT id,recipient FROM messages WHERE delivered_at IS NOT NULL ORDER BY delivered_at,seq;
           PRAGMA user_version=3;
+        `);
+      }
+      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 4) {
+        db.exec(`
+          CREATE TABLE session_activity (
+            session_id TEXT PRIMARY KEY REFERENCES sessions(id), last_activity_ms INTEGER NOT NULL
+          ) STRICT;
+          CREATE TABLE bridge_observations (
+            session_id TEXT NOT NULL REFERENCES sessions(id), instance TEXT NOT NULL,
+            epoch TEXT NOT NULL, last_seen_ms INTEGER NOT NULL, closed INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY(session_id,instance)
+          ) STRICT;
+          PRAGMA user_version=4;
         `);
       }
     });

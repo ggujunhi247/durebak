@@ -18,5 +18,5 @@ export function createSetup(host: string, sessionFile: string, outputFile: strin
   const {text}=getHarness(harness).renderMcpConfig({command,args});
   const path = resolve(outputFile);
   writeFileSync(path, text, { flag: 'wx', mode: 0o600 });
-  return { host, path, status: 'created', scope: 'session', auto_installed: false };
+  return { host, path, status: 'created', scope: 'config_fragment', discovery_scope: 'host_configuration', isolation_strategy: 'distinct_credential_per_bridge', isolation_evidence: 'renderer_tested', native_session_isolation: 'unverified', auto_installed: false };
 }
