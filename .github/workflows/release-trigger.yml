@@ -1,0 +1,27 @@
+name: Release tag
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: release-trigger-${{ github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch protected main release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          if [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; then
+            channel="${BASH_REMATCH[2]:-latest}"
+          else
+            echo 'Unsupported release tag' >&2
+            exit 1
+          fi
+          gh workflow run release.yml --repo "$RELEASE_REPOSITORY" --ref main -f tag="$RELEASE_TAG" -f channel="$channel" -f publish=true
