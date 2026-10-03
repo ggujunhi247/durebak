@@ -175,7 +175,10 @@ jobs:
           if [ "$RELEASE_CHANNEL" != latest ]; then args+=(--prerelease); fi
           if gh api "repos/$RELEASE_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/existing-release.json" 2> "$RUNNER_TEMP/release-error"; then
             mkdir -p "$RUNNER_TEMP/existing-assets"
-            gh release download "$RELEASE_TAG" --dir "$RUNNER_TEMP/existing-assets"
+            asset_count="$(node -e 'const fs=require("node:fs"); const data=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(!Array.isArray(data.assets))throw new Error("invalid_release_assets"); console.log(data.assets.length)' "$RUNNER_TEMP/existing-release.json")"
+            if [ "$asset_count" -gt 0 ]; then
+              gh release download "$RELEASE_TAG" --dir "$RUNNER_TEMP/existing-assets"
+            fi
             for asset in release/*; do
               name="$(basename "$asset")"
               if [ -f "$RUNNER_TEMP/existing-assets/$name" ]; then
