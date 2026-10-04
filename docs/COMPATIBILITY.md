@@ -14,7 +14,7 @@ Status updated 2026-10-01. A generated configuration is not evidence of a live h
 
 The plugin is an optional skill bundle. MCP configuration and the runtime remain separate. Plugin marketplace installation, updates and uninstall have not been end-to-end verified. Do not present this as marketplace-published support.
 
-Before a schema upgrade, stop the daemon and copy the entire private data directory to a private backup location. Preserve file modes. Try the new version on a copy first. To roll back, stop it and restore the pre-upgrade directory alongside the old binary; do not run an older binary against a newer schema. Schema 3 rejects unsupported newer schemas and uses delivery-order inbox cursors; reset old message-sequence cursors to zero.
+Before a schema upgrade, stop the daemon and copy the entire private data directory to a private backup location. Preserve file modes. Try the new version on a copy first. To roll back, stop it and restore the pre-upgrade directory alongside the old binary; do not run an older binary against a newer schema. Each runtime rejects unsupported newer schemas. Schema 3 and later use delivery-order inbox cursors; reset old message-sequence cursors to zero.
 
 ## Heterogeneous matrix
 

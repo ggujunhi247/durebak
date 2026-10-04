@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
+import {join,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {startRuntime} from '../src/runtime.js';
+import {request,adminCall} from '../src/client.js';
+import {z} from 'zod';
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
+
+test('HTTP and real MCP share request ACL, delivery, completion and recovery checkpoint',async t=>{
+ const root=mkdtempSync(join(tmpdir(),'durebak-request-http-'));const runtime=await startRuntime(root);
+ const peers=await Promise.all(['a','b','c'].map(alias=>adminCall(root,'/v1/register',{workspace:'w',alias,provider:'codex'}) as Promise<{session:{id:string};token:string}>));
+ const [a,b,c]=peers;if(!a||!b||!c)throw new Error('fixture');
+ const http=async(token:string,operation:string,args:unknown={})=>await request(root,token,'/v1/session',{operation,args}) as any;
+ const file=join(root,'worker.json');writeFileSync(file,JSON.stringify({data_dir:root,...b}),{mode:0o600});
+ const mcp=new Client({name:'test',version:'1'});
+ t.after(async()=>{await mcp.close();await runtime.close();rmSync(root,{recursive:true,force:true});});
+ await mcp.connect(new StdioClientTransport({command:process.execPath,args:[resolve('dist/cli.js'),'mcp','--session',file],stderr:'pipe'}));
+ const call=async(name:string,args:Record<string,unknown>)=>{const result=z.object({isError:z.boolean().optional(),content:z.array(z.object({text:z.string()})).min(1)}).parse(await mcp.callTool({name:`durebak_${name}`,arguments:args}));assert.equal(result.isError,undefined,JSON.stringify(result.content));return JSON.parse(result.content[0]!.text);};
+ const q=await http(a.token,'request_create',{to:b.session.id,body:'untrusted peer question',key:'q',priority:'urgent',urgentReason:'test immediate eligibility'});
+ assert.equal((await call('request_messages',{id:q.id})).items.length,0);
+ await assert.rejects(http(c.token,'request_get',{id:q.id}),/not_found/);
+ const received=await call('receive',{});assert.equal(received.items[0].request_id,q.id);
+ await call('ack',{id:received.items[0].id,receipt:received.items[0].receipt});
+ await call('request_transition',{id:q.id,version:1,state:'accepted'});
+ await call('request_message',{id:q.id,version:2,kind:'result',body:'answer',key:'result'});
+ assert.equal((await http(a.token,'request_get',{id:q.id})).state,'completed');
+ const cursor=(await call('inbox',{})).next;
+ const cp=await call('checkpoint_set',{consumer:'worker',version:0,messageCursor:cursor,controlCursor:0});
+ assert.equal((await http(b.token,'checkpoint_get',{consumer:'worker'})).version,cp.version);
+ assert((await http(a.token,'runtime_info')).capabilities.includes('request_threads_v1'));
+});

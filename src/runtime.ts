@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { Store } from './store.js';
 import { DomainError, fail, sendSchema, taskSchema, type Session } from './domain.js';
 import { privateDirectory } from './database.js';
+import {requestCreateSchema,requestMessageSchema,requestTransitionSchema,checkpointSchema} from './requests.js';
 
 const identifier = z.string().min(1).max(200);
 const page = z.object({ after: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(20).default(10) }).strict();
@@ -16,6 +17,16 @@ const source = z.object({ id: identifier, offset: z.number().int().min(0).defaul
 const taskVersion = z.object({ id: identifier, version: z.number().int().positive() }).strict();
 const empty = z.object({}).strict();
 export const operations = {
+  request_create:requestCreateSchema,
+  request_get:z.object({id:identifier}).strict(),
+  request_list:z.object({after:z.string().max(200).default(''),limit:z.number().int().min(1).max(20).default(10)}).strict(),
+  request_messages:page.extend({id:identifier}),
+  request_message:requestMessageSchema,
+  request_transition:requestTransitionSchema,
+  request_controls:page,
+  control_ack:z.object({cursor:z.number().int().positive()}).strict(),
+  checkpoint_get:z.object({consumer:identifier}).strict(),
+  checkpoint_set:checkpointSchema,
   runtime_info: empty,
   bridge_touch: z.object({instance:z.string().uuid(),epoch:z.string().regex(/^[a-f0-9]{32}$/)}).strict(),
   bridge_close: z.object({instance:z.string().uuid(),epoch:z.string().regex(/^[a-f0-9]{32}$/)}).strict(),
@@ -46,7 +57,17 @@ export type Operation = keyof typeof operations;
 function dispatch(store: Store, actor: Session, operation: Operation, input: unknown, epoch: string): unknown {
   // Each branch parses at the trust boundary before entering the store.
   switch (operation) {
-    case 'runtime_info': empty.parse(input); return { version, protocol_version: protocolVersion, schema_version: schemaVersion, session_id: actor.id, daemon_epoch: epoch, capabilities:['session_health_v1'] };
+    case 'request_create':return store.requestCreate(actor,requestCreateSchema.parse(input));
+    case 'request_get':return store.requestGet(actor,operations.request_get.parse(input).id);
+    case 'request_list':{const a=operations.request_list.parse(input);return store.requestList(actor,a.after,a.limit);}
+    case 'request_messages':{const a=operations.request_messages.parse(input);return store.requestMessages(actor,a.id,a.after,a.limit);}
+    case 'request_message':return store.requestMessage(actor,requestMessageSchema.parse(input));
+    case 'request_transition':{const a=requestTransitionSchema.parse(input);return store.requestTransition(actor,a.id,a.version,a.state,{...(a.reasonCode?{reasonCode:a.reasonCode}:{}),...(a.detail?{detail:a.detail}:{})});}
+    case 'request_controls':{const a=page.parse(input);return store.requestControls(actor,a.after,a.limit);}
+    case 'control_ack':return store.controlAck(actor,operations.control_ack.parse(input).cursor);
+    case 'checkpoint_get':return store.checkpointGet(actor,operations.checkpoint_get.parse(input).consumer);
+    case 'checkpoint_set':return store.checkpointSet(actor,checkpointSchema.parse(input));
+    case 'runtime_info': empty.parse(input); return { version, protocol_version: protocolVersion, schema_version: schemaVersion, session_id: actor.id, daemon_epoch: epoch, capabilities:['session_health_v1','request_threads_v1','request_controls_v1','consumer_checkpoints_v1'] };
     case 'session_health': {const a=operations.session_health.parse(input);return store.sessionHealth(actor,a.id??actor.id,epoch);}
     case 'bridge_touch': {const a=operations.bridge_touch.parse(input);if(a.epoch!==epoch)fail('daemon_epoch_mismatch');return store.bridgeTouch(actor,a.instance,epoch);}
     case 'bridge_close': {const a=operations.bridge_close.parse(input);if(a.epoch!==epoch)fail('daemon_epoch_mismatch');return store.bridgeClose(actor,a.instance,epoch);}
@@ -125,7 +146,7 @@ export async function startRuntime(directory: string) {
       const actor = store.authenticate(token);
       if (!actor) { respond(res, 401, { error: 'unauthorized' }); return; }
       const input = z.object({ operation: z.enum(Object.keys(operations) as [Operation, ...Operation[]]), args: z.unknown() }).strict().parse(body);
-      if (!['runtime_info','sessions','session_health','bridge_touch','bridge_close','events'].includes(input.operation)) store.activityTouch(actor);
+      if (!['runtime_info','sessions','session_health','bridge_touch','bridge_close','events','request_get','request_list','request_messages','checkpoint_get'].includes(input.operation)) store.activityTouch(actor);
       respond(res, 200, dispatch(store, actor, input.operation, input.args, instance));
     } catch (error) {
       const code = error instanceof DomainError ? error.code : error instanceof z.ZodError ? 'invalid_input' : 'internal_error';
@@ -143,8 +164,10 @@ export async function startRuntime(directory: string) {
     writeFileSync(join(directory, 'connection.json'), JSON.stringify({ url, instance }), { mode: 0o600 });
   } catch (error) { server.close(); store.close(); unlinkSync(lockPath); throw error; }
   let closed = false;
+  const expiryTimer=setInterval(()=>{try{store.expireRequests();}catch{/* Queries still report storage errors; never submit a host turn here. */}},1000);
+  expiryTimer.unref();
   return { url, adminToken, async close() {
-    if (closed) return; closed = true;
+    if (closed) return; closed = true; clearInterval(expiryTimer);
     server.closeAllConnections();
     await new Promise<void>(resolve => server.close(() => resolve()));
     store.close();
