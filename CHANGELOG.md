@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.14 — 2026-10-05
+
+- Add an internal experimental macOS command compiler that applies a deny-default OS boundary before native configuration bootstrap, with selected private input/runtime roots and a separate owner profile.
+- Reject overlapping roots, unsafe staged trees and pre-existing hardlink aliases; require caller-controlled staging and immediate pre-spawn revalidation.
+- Explicitly deny special process-info/sysctl operations and verify kernel process-environment denial against a clean synthetic unsigned process with a successful unsandboxed control.
+- Installed OpenCode1.18.34 passed the compiled policy non-model probe and process-group cleanup. External provider network, actual model tool scope, owned-host/controller integration and automatic wake remain required gates.
+
 ## 0.1.0-alpha.13 — 2026-10-04
 
 - Check exact OpenCode session status before submission; Durebak refuses another submission while busy/retry even after a terminal ledger result.
