@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.10 — 2026-10-04
+
+- Preserve exact completed native Codex answers as immutable profile-local snapshots with source identity, item identity and SHA-256 evidence.
+- Add bounded UTF-8 result reads and additive private ledger migration while rejecting ambiguous, conflicting or stale-owner answers.
+- Validate 323 regression tests. Actual model collaboration and automatic native wake remain unverified; this release provides internal result collection foundations.
+
 ## 0.1.0-alpha.9 — 2026-10-04
 
 - Add an internal durable native Codex turn ledger with exact receipts, stop intent and unknown reconciliation; transport fixtures cover cancellation and response loss.
