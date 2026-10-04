@@ -132,3 +132,15 @@ Policy off·session pause·request 취소/기한·grant 만료는 중단 의도�
 독립 리뷰에서 관측·재시도 경로의 clock high-water 누락과 host busy 상태에서 기존 intent key 복구 실패를 발견했다. 실패 회귀 후 작업 진입·early rejection·replay·terminal receipt·응답 유실에서 durable owner/grant expiry를 관측하도록 수정했다. Owner lease 만료는 unknown을 유지하며 자동 갱신/인계하지 않는다. Deadline/만료는 clock rollback이나 peer read 부재로 부활하지 않는다.
 
 Schema1–11 migration은 유지하고 schema12에 outcome/control 열만 추가한다. Living continuation·child provenance·actual native model wake와 지원 Provider 확대는 아직 별도 gate이며 answer/result reservation은 계속 차단한다. Alpha.6 immutable artifact(schema10)에 이 개발 내용을 소급하지 않는다.
+
+## schema13 개발: 모의 하위 요청과 대기 중인 세션의 이어 실행
+
+관리자 grant의 allowedPeers는 기본 빈 목록이며 같은 workspace의 명시적 상대만 허용한다. 실행 중이며 입력 접수가 확인된 mock attempt만 하위 요청을 만들 수 있다. 표준 요청·첨부·preview 검증과 execution origin 저장은 같은 transaction으로 처리하며, 일반 요청을 같은 key로 실행 lineage에 편입하지 않는다. 공유 원문은 명시적 하위 요청 내용뿐이며 부모 대화 전체를 복사하지 않는다.
+
+하위 요청은 원래 root grant의 turn·동시 실행 예산을 공유하고 자기 실행 grant도 함께 차감한다. 부모/root 요청과 양쪽 grant보다 기한을 늘릴 수 없다. 명시적 root 취소·off·만료는 하위 실행에도 적용한다. Unknown 실행은 공유 예산·소유권을 유지하며 confirmed nonacceptance만 차감한 turn을 한 번 반환한다.
+
+Trusted mock의 awaiting_peer receipt가 exact child origin을 가리키는 경우에만 완료된 host turn과 durable waiter를 함께 기록한다. 현재 binding/epoch/instance·grant digest·deadline에 맞는 answer/result만 waiter를 한 번 claim할 수 있다. 제출 전 현재 source/policy/원래 요청을 다시 확인한다. 응답 유실 후에는 같은 attempt를 관측하며 자동 재제출하거나 waiter를 복원하지 않는다. 대기 상태의 기한·취소 관측은 다음 작업 실패나 clock rollback 뒤에도 유지한다.
+
+이 단계는 내부 mock controller 검증이며 공개 실행 operation, 실제 Provider model turn, 자동 wake scheduler, 기존 활성 native session resume를 추가하지 않는다. Cooperative Claude/Codex/OpenCode CLI·HTTP·MCP 및 공통 skill/command는 이전 범위를 유지한다. Schema1–12 migration은 유지하고 schema13을 추가한다. 기존 schema12 예약의 policy digest는 peer 허용 범위를 포함한 현재 digest와 다르므로 제출을 거부하고 재검증해야 한다. 기존 unknown/submitting은 새 작업으로 재제출하지 않는다. Immutable alpha.6(schema10) 파일에 개발 범위를 소급하지 않는다.
+
+독립 리뷰에서 root peer 권한 철회·부모 일시정지 전 제출·중간 요청 취소 전파의 누락을 재현했다. 공유 provenance gate에서 직접 부모 및 root grant와 모든 요청 조상을 확인하도록 보강했고, 실패 재현4개와 continuation/reservation/driver55개를 다시 확인했다. Alpha.7은 schema13이며 실제 native wake/모델 협업 지원 주장은 추가하지 않는다.

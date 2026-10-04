@@ -4,9 +4,9 @@ import {z} from 'zod';
 import {short,fail,hash,type Session} from './domain.js';
 import {transaction} from './transactions.js';
 export const managedBindSchema=z.object({sessionId:short,harness:z.literal('codex'),profile:short,nativeId:short,instance:short,key:short}).strict();
-export const managedPolicySchema=z.object({bindingId:short,version:z.number().int().positive(),enabled:z.boolean(),key:short,maxTurns:z.number().int().min(1).max(30).optional(),maxConcurrent:z.number().int().min(1).max(3).optional(),ttlMs:z.number().int().min(1).max(3600000).optional()}).strict();
+export const managedPolicySchema=z.object({bindingId:short,version:z.number().int().positive(),enabled:z.boolean(),key:short,maxTurns:z.number().int().min(1).max(30).optional(),maxConcurrent:z.number().int().min(1).max(3).optional(),allowedPeers:z.array(short).max(20).refine(v=>new Set(v).size===v.length,'duplicate peer').optional(),ttlMs:z.number().int().min(1).max(3600000).optional()}).strict();
 export const managedRenewSchema=z.object({bindingId:short,epoch:z.number().int().positive(),ownerToken:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
-export interface ManagedPolicy {binding_id:string;version:number;enabled:boolean;scope_id:string;max_turns:number;max_concurrent:number;expires_at:number|null;grant_ttl_ms:number;expired:boolean;spent_turns:number;active_turns:number}
+export interface ManagedPolicy {binding_id:string;version:number;enabled:boolean;scope_id:string;max_turns:number;max_concurrent:number;expires_at:number|null;grant_ttl_ms:number;expired:boolean;spent_turns:number;active_turns:number;allowed_peers:string}
 interface Binding {id:string;session_id:string;workspace:string;harness:string;profile:string;native_id:string;instance:string;epoch:number;lease_until:number;created_ms:number;last_owner_contact_ms:number;last_observed_ms:number;execution_state:string;owner_hash:string;key:string;digest:string}
 export class ManagedControl {
  constructor(private db:DatabaseSync,private clock:{now():number}){}
@@ -40,8 +40,9 @@ export class ManagedControl {
   if(data.enabled&&revoked)fail('binding_revoked');if(data.enabled&&policy.expired)fail('grant_expired');if(data.enabled&&binding.execution_state==='unknown')fail('execution_unknown');
   if(data.ttlMs!==undefined&&policy.expires_at!==null)fail('grant_scope_immutable');
   const maxTurns=data.maxTurns??policy.max_turns,maxConcurrent=data.maxConcurrent??policy.max_concurrent;if(maxTurns<policy.spent_turns)fail('budget_below_spent');
+  const peers=data.allowedPeers??JSON.parse(policy.allowed_peers) as string[];for(const id of peers)if(id===binding.session_id||!this.db.prepare('SELECT id FROM sessions WHERE id=? AND workspace=? AND revoked=0').get(id,binding.workspace))fail('invalid_allowed_peer');
   const ttl=data.ttlMs??policy.grant_ttl_ms,expires=policy.expires_at??(data.enabled?now+ttl:null);
-  this.db.prepare('UPDATE managed_policies SET version=version+1,enabled=?,max_turns=?,max_concurrent=?,expires_at=?,grant_ttl_ms=? WHERE binding_id=?').run(data.enabled?1:0,maxTurns,maxConcurrent,expires,ttl,binding.id);
+  this.db.prepare('UPDATE managed_policies SET version=version+1,enabled=?,max_turns=?,max_concurrent=?,expires_at=?,grant_ttl_ms=?,allowed_peers=? WHERE binding_id=?').run(data.enabled?1:0,maxTurns,maxConcurrent,expires,ttl,JSON.stringify([...peers].sort()),binding.id);
   const snapshot=this.policy(binding.id);this.db.prepare('INSERT INTO managed_policy_updates(binding_id,key,digest,snapshot) VALUES(?,?,?,?)').run(binding.id,data.key,digest,JSON.stringify(snapshot));return snapshot;
  });}
  renew(bindingId:string,epoch:number,ownerToken:string){const data=managedRenewSchema.parse({bindingId,epoch,ownerToken});return transaction(this.db,()=>{
@@ -58,3 +59,5 @@ export class ManagedControl {
   return {configured:true,...policy,auto_wake:false,host_readiness:'unverified',execution_state:row.execution_state,host_stopped:'unknown',epoch:row.epoch,blocked_reason:reason};
  });}
 }
+
+export function managedPolicyDigest(p:ManagedPolicy){return hash(JSON.stringify({binding:p.binding_id,version:p.version,enabled:!!p.enabled,scope:p.scope_id,maxTurns:p.max_turns,maxConcurrent:p.max_concurrent,expires:p.expires_at,expired:!!p.expired,peers:JSON.parse(p.allowed_peers)}));}
