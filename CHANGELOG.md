@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-alpha.9 — 2026-10-04
+
+- Add an internal durable native Codex turn ledger with exact receipts, stop intent and unknown reconciliation; transport fixtures cover cancellation and response loss.
+- Add a fresh owned Codex host factory with private configuration checks, scoped command canaries and process-group shutdown before ownership release.
+- Cover descendants retaining pipes or ignoring graceful termination, including unexpected leader exit.
+- Deliver verified GitHub release assets independently of npm publisher authentication while preserving single-pack integrity and immutable retry checks.
+- Installed Codex 0.146.0 non-model checks pass. Actual model collaboration, automatic wake and other native provider execution remain unverified.
+
 ## 0.1.0-alpha.8 — 2026-10-04
 
 - Add bounded internal Codex app-server RPC framing, request limits and fail-closed transport handling.

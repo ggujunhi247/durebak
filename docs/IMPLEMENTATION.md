@@ -167,3 +167,12 @@ CodexTurns는 live NativeProfileFence의 canonical profile·native ID·epoch·in
 응답 유실·다른 thread/cwd/version·알 수 없는 turn은 unknown으로 남기고 새 turn이나 resume를 호출하지 않는다. 같은 live 소유권 안의 재연결은 저장된 정확한 turn ID만 thread/read(includeTurns)로 관측한다. Native owner 종료 이후의 takeover/restart 복구는 아직 별도 gate다. 원문은16KiB, profile-local intent는30개로 제한하며 ledger에는 source digest·identity·receipt만 저장한다. Terminal 관측은 이전 결과를 뒤집지 않는다. Configured permission ID는 provenance에 포함되지만 이 class 자체는 실제 tool isolation이나 host factory 신뢰를 증명하지 않는다.
 
 건강 확인은 thread metadata와 account/read의 인증 존재만 반환하고 model entitlement는 unverified다. Installed Codex0.146.0의 새 thread는 아직 rollout history가 없어 includeTurns:true를 -32600으로 거부했다. Health에서는 includeTurns:false를 사용하고 실제 비모델 probe에서 auth:required 및 인증 누락 시 turn/start0회를 확인했다. Fake protocol 회귀는 접수·중단·known-turn 관측과 경쟁 조건을 검증하며 실제 모델 협업의 근거가 아니다. Controller authority는 mock-only이고 공개 실행 operation/auto_wake는 추가하지 않는다. Owned host factory·인증·실제 모델 tool scope/turn/interrupt/restart·scheduler 검증을 이어 진행한다. Immutable alpha.8 artifact는 변경하지 않는다.
+
+
+## Alpha.9: 새 owned Codex host와 배포 분리
+
+내부 startOwnedCodexHost는 명시적으로 지정한 실행 파일과 private canonical profile·빈 input directory를 검사한다. 정확한 named permission config와 owner fence를 확보한 후 installed0.146.0·fresh loaded state·effective config·새 persistent thread identity·선택한 permission·빈 instruction/MCP 범위를 확인한다. 비모델 command canary로 선택 원문 읽기 허용 및 외부/profile/symlink 읽기·쓰기 거부를 확인한 다음 같은 live owner의 CodexTurns에 연결한다. 기존 활성 session resume나 credential 복사, controller 권한 확대는 없다.
+
+정상·비정상 종료 모두 즉시 native interface를 retire하고 owned process group에만 TERM/KILL을 전달한다. 부모 close 이벤트뿐 아니라 남은 group이 없음을 확인한 후에만 fence를 해제한다. 하위 프로세스가 pipe를 상속하거나 TERM을 무시하는 경우도 회귀 검증했다. 종료 불확실 상태에서는 fence를 유지하며 자동 takeover하지 않는다. Installed macOS Codex의 같은 factory 비모델 probe는 통과했지만 model entitlement·모든 model tool isolation·실제 협업/interrupt/restart는 별도 gate다. Controller는 mock-only, auto_wake:false를 유지한다.
+
+Release workflow의 GitHub delivery와 npm publisher를 독립 job으로 분리했다. 두 경로 모두 동일한 CI pack과 checksum을 사용하며 Linux/macOS 검증·secret scan·installed smoke 이후에만 배포한다. npm 인증 실패가 검증된 GitHub artifact 배포를 막지 않으며, npm 게시 성공 여부는 registry bytes로 따로 확인한다. 이전 immutable alpha.8 artifact는 변경하지 않는다.

@@ -136,7 +136,7 @@ jobs:
     environment: npm
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -164,6 +164,34 @@ jobs:
           node scripts/check-package.mjs --tarball "$(find release -name '*.tgz')"
           node scripts/publish-release.mjs --tarball "$(find release -name '*.tgz')" --channel "$RELEASE_CHANNEL"
           node scripts/smoke-package.mjs --tarball "$(find release -name '*.tgz')"
+  github-release:
+    if: inputs.publish
+    needs: [artifact, smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.artifact.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release
+          path: release
+      - name: Revalidate identical GitHub artifact
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          node scripts/check-release.mjs --publish --tag "$RELEASE_TAG" --channel "$RELEASE_CHANNEL" --repository "$RELEASE_REPOSITORY"
+          (cd release && sha256sum --check SHA256SUMS)
+          node scripts/check-package.mjs --tarball "$(find release -name '*.tgz')"
       - name: Create or verify GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
