@@ -1,6 +1,6 @@
 # 두레박 사용법 — cooperative alpha
 
-Node.js 24 이상이 필요하다. GitHub 소스는 공개되어 있으며 npm은 아직 미출판이다. 저장소에서 빌드해 실행한다.
+Node.js 24 이상이 필요하다. GitHub 소스와 npm alpha 채널은 공개되어 있다. 다음 개발 기능은 배포 버전과 구분한다. 아래 절차는 저장소에서 빌드해 실행하는 방법이다.
 
 ```sh
 npm ci
@@ -225,3 +225,18 @@ MCP bridge는 시작 시와 성공 후 10초 간격으로 접촉을 기록한다
 일반 세션 작업 호출의 last_activity_at과 선언된 available/busy/paused는 별도다. 상태·세션 목록·진단 조회는 접촉을 갱신하지 않는다. fresh+paused는 연결 관측은 최근이지만 전달은 보류된 상태다. host/readiness/progress는 unknown, auto_wake는 false이며 이 기능은 native 세션을 깨우거나 재개하지 않는다. schema 3 데이터는 새 migration으로 보존하며 이전 daemon 접촉을 새 연결로 간주하지 않는다.
 
 setup 출력의 scope=config_fragment는 설정 파일 조각의 생성 범위다. isolation_evidence=renderer_tested와 native_session_isolation=unverified를 함께 반환한다. 서로 다른 credential을 가진 설정 생성 시험은 실제 호스트의 설정 discovery·native 세션 격리를 증명하지 않는다. 공통 global/project 설정에 하나의 credential을 넣어 여러 세션이 identity를 공유하지 않도록 호스트별 연결 범위를 확인한다.
+## 요청별 협업과 재접속 — 다음 버전 개발
+
+`runtime_info.capabilities`의 `request_threads_v1`, `request_controls_v1`, `consumer_checkpoints_v1`을 먼저 확인하세요. 기능이 없는 daemon에서 기존 send로 조용히 대체하지 않습니다. CLI의 `durebak call OPERATION --session FILE --json JSON`과 같은 이름의 `durebak_OPERATION` MCP 도구가 동일 계약을 사용합니다.
+
+- `request_create`: `{ "to":"PEER_ID", "body":"검토할 명시적 본문", "key":"review-1", "deadlineMs":600000 }`. 기본 normal 메시지는5초 뒤 전달 가능하므로 기한은 전달 시각보다 길어야 합니다. 첨부와 기존 task 연결은 이 단계에서 지원하지 않습니다.
+- `receive`에 `request_id`와 `message_kind`가 있으면 해당 요청입니다. 실제 읽음은 기존 receipt 기반 `ack`를 사용합니다. `request_transition`의 `{ "id":"REQUEST_ID", "version":1, "state":"accepted" }`는 별도 수락입니다.
+- `request_message`: `{ "id":"REQUEST_ID", "version":2, "kind":"result", "body":"결과 본문", "key":"result-1" }`. answer/note/result를 구분합니다. 동일 key의 동일 제출은 재시도할 수 있고 변경된 제출은 conflict입니다. 늦은 result는 감사 자료이며 종료된 요청을 다시 완료하지 않습니다.
+- 생성자는 expected version으로 cancelled를, 수신자는 rejected/failed를 설정할 수 있습니다. 거절/실패에는 `reasonCode`와 `detail`이 필요합니다. 기한은 pause·daemon 중단 중에도 연장되지 않습니다.
+- `request_get/list/messages`는 참여한 요청만 조회합니다. 대화 페이지는 아직 전달되지 않은 메시지를 넘겨 cursor를 진행하지 않고 `waiting_delivery`를 표시합니다. 전달되지 않고 만료된 본문은 redacted입니다. 조회가 receive/ack를 대신하지 않습니다.
+- `request_controls`로 취소/만료 notice를 확인하고 `control_ack`의 `{ "cursor":NOTICE_CURSOR }`로 확인합니다. `host_stopped: "unknown"`은 그대로 유지되며 외부 코드 도구를 자동 중단하지 않습니다.
+- `checkpoint_get`의 `{ "consumer":"worker" }`, `checkpoint_set`의 `{ "consumer":"worker", "version":0, "messageCursor":0, "controlCursor":0 }`으로 재접속 위치를 보존합니다. 전달 cursor는 inbox의 `next`이며 message seq가 아닙니다. 관측하지 않은 cursor, 역행, version 충돌을 거부합니다. 한 세션 최대20 consumers이며 다른 세션과 공유하지 않습니다.
+
+이 기능은 Cooperative 복구 계약입니다. 같은 native 세션의 자동 깨우기·재개, Managed/Attached 실행은 아직 지원하지 않습니다.
+
+요청 메타데이터의 bounded 응답을 보장하기 위해 workspace의 JSON 인코딩 크기가 4 KiB를 넘으면 `request_create`는 `request_scope_too_large`로 거부합니다. 기존 일반 메시지 계약은 유지합니다.

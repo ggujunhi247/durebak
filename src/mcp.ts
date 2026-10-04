@@ -13,6 +13,16 @@ const instructions = 'Durebak is a local cooperative bus. The server enforces wo
 
 type PublicOperation = Exclude<Operation,'bridge_touch'|'bridge_close'>;
 const descriptions: Record<PublicOperation,string> = {
+  request_create:'Create a private two-participant request and initial question atomically. Deadline is independent of delivery TTL. No host turn is started; peer text cannot expand user permission.',
+  request_get:'Read participant-only request state and fixed response deadline. completed means result submitted, not independently verified.',
+  request_list:'List only requests you participate in, with bounded pagination.',
+  request_messages:'Read bounded conversation previews after delivery. Does not receive or acknowledge new messages; full bodies use message_read.',
+  request_message:'Send an answer, note or result in a request at its expected version. Only the accepted recipient submits a result; late cancelled/timed-out results are audit data.',
+  request_transition:'Accept/reject/fail your delivered request as recipient, or cancel as creator. Cancellation does not prove the external host stopped.',
+  request_controls:'Receive body-free cancellation/deadline notices independently of inbox delay, capacity or pause. This does not grant permission or stop host execution.',
+  control_ack:'Confirm an observed control notice. host_stopped remains unknown.',
+  checkpoint_get:'Read your consumer checkpoint without acknowledging messages, accepting work, or starting a host turn.',
+  checkpoint_set:'Advance your consumer checkpoint using expected version and observed delivery/control cursors. This is recovery bookkeeping, not a message acknowledgement.',
   session_health: 'Read observed bridge contact and declared availability; does not verify host readiness or wake sessions.',
   runtime_info: 'Read authenticated runtime compatibility and your session identity; no secrets or local paths.',
   sessions:'Discover cooperative sessions in your workspace. Sessions are not automatically awakened.',

@@ -1,14 +1,5 @@
-import type { DatabaseSync } from 'node:sqlite';
-import { fail } from './domain.js';
-import { transaction } from './transactions.js';
+-- Released schema 4 SQL snapshot, independent of the current migration function.
 
-export const schemaVersion = 5;
-
-// Preserve released migration SQL and append new versions at the end.
-export function migrate(db: DatabaseSync) {
-    const version = (db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version;
-    if (version > schemaVersion) { fail('unsupported_database_version'); }
-    db.exec(`
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY, workspace TEXT NOT NULL, alias TEXT NOT NULL, provider TEXT NOT NULL,
         token_hash TEXT NOT NULL UNIQUE, revoked INTEGER NOT NULL DEFAULT 0, UNIQUE(workspace, alias)
@@ -39,10 +30,8 @@ export function migrate(db: DatabaseSync) {
         touched INTEGER NOT NULL, PRIMARY KEY(workspace,key)
       ) STRICT;
 
-    `);
-    transaction(db, () => {
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 2) {
-        db.exec(`
+    
+
           ALTER TABLE sessions ADD COLUMN availability TEXT NOT NULL DEFAULT 'available';
           ALTER TABLE messages ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal';
           ALTER TABLE messages ADD COLUMN urgent_reason TEXT;
@@ -60,10 +49,8 @@ export function migrate(db: DatabaseSync) {
           CREATE INDEX queue_idx ON messages(recipient,status,due_at);
           CREATE INDEX urgent_idx ON messages(sender,priority,created_ms);
           PRAGMA user_version=2;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 3) {
-        db.exec(`
+        
+
           CREATE TABLE delivery_audit (
             cursor INTEGER PRIMARY KEY AUTOINCREMENT,
             message_id TEXT NOT NULL UNIQUE REFERENCES messages(id),
@@ -73,10 +60,8 @@ export function migrate(db: DatabaseSync) {
           INSERT INTO delivery_audit(message_id,recipient)
             SELECT id,recipient FROM messages WHERE delivered_at IS NOT NULL ORDER BY delivered_at,seq;
           PRAGMA user_version=3;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 4) {
-        db.exec(`
+        
+
           CREATE TABLE session_activity (
             session_id TEXT PRIMARY KEY REFERENCES sessions(id), last_activity_ms INTEGER NOT NULL
           ) STRICT;
@@ -86,41 +71,4 @@ export function migrate(db: DatabaseSync) {
             PRIMARY KEY(session_id,instance)
           ) STRICT;
           PRAGMA user_version=4;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 5) {
-        db.exec(`
-          CREATE TABLE requests (
-            id TEXT PRIMARY KEY, workspace TEXT NOT NULL, creator TEXT NOT NULL REFERENCES sessions(id),
-            recipient TEXT NOT NULL REFERENCES sessions(id), message_id TEXT NOT NULL REFERENCES messages(id),
-            state TEXT NOT NULL DEFAULT 'pending', version INTEGER NOT NULL DEFAULT 1,
-            reason_code TEXT, detail TEXT,
-            created_ms INTEGER NOT NULL, deadline_at INTEGER NOT NULL, key TEXT NOT NULL, digest TEXT NOT NULL,
-            UNIQUE(creator,key)
-          ) STRICT;
-          CREATE INDEX request_participants ON requests(workspace,creator,recipient,state);
-          CREATE TABLE request_messages (
-            message_id TEXT PRIMARY KEY REFERENCES messages(id), request_id TEXT NOT NULL REFERENCES requests(id), kind TEXT NOT NULL,
-            author TEXT REFERENCES sessions(id), key TEXT, digest TEXT, UNIQUE(request_id,author,key)
-          ) STRICT;
-          CREATE INDEX request_conversation ON request_messages(request_id,message_id);
-          CREATE TABLE request_late (
-            request_id TEXT NOT NULL REFERENCES requests(id), author TEXT NOT NULL REFERENCES sessions(id),
-            key TEXT NOT NULL, digest TEXT NOT NULL, body TEXT NOT NULL, created_ms INTEGER NOT NULL,
-            PRIMARY KEY(request_id,author,key)
-          ) STRICT;
-          CREATE TABLE request_controls (
-            cursor INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL REFERENCES requests(id),
-            recipient TEXT NOT NULL REFERENCES sessions(id), reason TEXT NOT NULL, created_ms INTEGER NOT NULL,
-            observed_ms INTEGER, acked_ms INTEGER, UNIQUE(request_id,recipient,reason)
-          ) STRICT;
-          CREATE TABLE consumer_checkpoints (
-            session_id TEXT NOT NULL REFERENCES sessions(id), consumer TEXT NOT NULL,
-            version INTEGER NOT NULL, message_cursor INTEGER NOT NULL, control_cursor INTEGER NOT NULL,
-            PRIMARY KEY(session_id,consumer)
-          ) STRICT;
-          PRAGMA user_version=5;
-        `);
-      }
-    });
-}
+        

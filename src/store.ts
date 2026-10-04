@@ -6,6 +6,7 @@ import { bridgeHealth, type BridgeObservation, type SessionHealth } from './heal
 import { openDatabase } from './database.js';
 import { transaction } from './transactions.js';
 import { encodedPreview, preview, range } from './content.js';
+import { RequestRepository,requestCreateSchema,requestMessageSchema,checkpointSchema,type RequestState } from './requests.js';
 import { queuePolicy, retryDelay, canDeliver, deliveryRank } from './queue-policy.js';
 
 // Compatibility facade: CLI, HTTP, MCP and existing consumers keep their API.
@@ -17,8 +18,10 @@ export { queuePolicy } from './queue-policy.js';
 export class Store {
   private readonly db: DatabaseSync;
   private closed = false;
+  private readonly requests: RequestRepository;
   constructor(readonly directory: string, private readonly clock = { now: () => Date.now() }) {
     this.db = openDatabase(directory);
+    this.requests=new RequestRepository(this.db,this.clock,(actor,input,now)=>this.enqueue(actor,input,now));
   }
   close() { if (!this.closed) { this.db.close(); this.closed = true; } }
   private one<T>(sql: string, ...values: SQLInputValue[]): T | undefined { return this.db.prepare(sql).get(...values) as T | undefined; }
@@ -76,30 +79,40 @@ export class Store {
     const activity=this.one<{last_activity_ms:number}>('SELECT last_activity_ms FROM session_activity WHERE session_id=?',id);
     return {session_id:id,bridge:bridgeHealth(rows.map(x=>({...x,closed:!!x.closed})),epoch,this.clock.now()),last_activity_at:activity?.last_activity_ms??null,availability:session.availability,host:'unknown',readiness:'unknown',progress:'unknown',auto_wake:false};
   }
-  send(actor: Session, input: z.input<typeof sendSchema>): Message {
+  send(actor: Session, input: z.input<typeof sendSchema>): Message { return this.transaction(()=>this.enqueue(actor,input)); }
+  requestCreate(actor:Session,input:z.input<typeof requestCreateSchema>){return this.requests.create(actor,input);}
+  requestGet(actor:Session,id:string){return this.requests.get(actor,id);}
+  requestList(actor:Session,after='',limit=10){return this.requests.list(actor,after,limit);}
+  requestMessages(actor:Session,id:string,after=0,limit=10){return this.requests.messages(actor,id,after,limit);}
+  requestTransition(actor:Session,id:string,version:number,state:Exclude<RequestState,'pending'|'completed'|'timed_out'>,reason:{reasonCode?:string;detail?:string}={}){return this.requests.transition(actor,id,version,state,reason);}
+  requestMessage(actor:Session,input:z.input<typeof requestMessageSchema>){return this.requests.message(actor,input);}
+  requestControls(actor:Session,after=0,limit=10){return this.requests.controls(actor,after,limit);}
+  controlAck(actor:Session,cursor:number){return this.requests.controlAck(actor,cursor);}
+  checkpointGet(actor:Session,consumer:string){return this.requests.checkpointGet(actor,consumer);}
+  checkpointSet(actor:Session,input:z.input<typeof checkpointSchema>){return this.requests.checkpointSet(actor,input);}
+  expireRequests(){this.requests.expire();}
+  private enqueue(actor: Session, input: z.input<typeof sendSchema>, decisionTime=this.clock.now()): Message {
     const data = sendSchema.parse(input);
     if (data.priority === 'urgent' && !data.urgentReason) fail('urgent_reason_required');
     const digest = hash(JSON.stringify([data.to, data.body, data.replyTo ?? null, data.priority, data.urgentReason ?? null, data.delayMs, data.ttlMs]));
-    return this.transaction(() => {
-      const old = this.one<QueuedMessage>('SELECT * FROM messages WHERE sender=? AND key=?', actor.id, data.key);
-      if (old) {
-        const legacyMatch = old.legacy && data.priority==='normal' && !data.urgentReason && data.delayMs===0 && data.ttlMs===86400000 && old.digest===hash(JSON.stringify([data.to,data.body,data.replyTo??null]));
-        if (old.digest !== digest && !legacyMatch) fail('idempotency_conflict'); return this.message(old.id);
-      }
-      if (!this.one('SELECT id FROM sessions WHERE id=? AND workspace=? AND revoked=0', data.to, actor.workspace)) fail('not_found');
-      if (data.replyTo && !this.one('SELECT id FROM messages WHERE id=? AND workspace=? AND recipient=? AND sender=?', data.replyTo, actor.workspace, actor.id, data.to)) fail('invalid_reply');
-      const now = this.clock.now();
-      const due = now + Math.max(queuePolicy.delay_ms[data.priority], data.delayMs);
-      if (now + data.ttlMs <= due) fail('expiry_before_delivery');
-      this.maintain(data.to, now);
-      if (data.priority==='urgent' && this.one<{n:number}>("SELECT count(*) n FROM messages WHERE sender=? AND priority='urgent' AND created_ms>?", actor.id, now-queuePolicy.urgent_window_ms)!.n >= queuePolicy.urgent_limit) fail('urgent_quota_exceeded');
-      const count = this.one<{ n: number }>("SELECT count(*) n FROM messages WHERE recipient=? AND status IN ('queued','in_flight')", data.to)!.n;
-      if (count >= queuePolicy.capacity) fail('inbox_full');
-      const messageId = randomUUID();
-      this.run("INSERT INTO messages(id,workspace,sender,recipient,body,reply_to,created_at,key,digest,status,priority,urgent_reason,created_ms,due_at,expires_at,legacy) VALUES(?,?,?,?,?,?,?,?,?,'queued',?,?,?,?,?,0)", messageId, actor.workspace, actor.id, data.to, data.body, data.replyTo ?? null, new Date(now).toISOString(), data.key, digest, data.priority, data.urgentReason??null, now, due, now+data.ttlMs);
-      this.event(actor.workspace, 'message.queued', messageId);
-      return this.message(messageId);
-    });
+    const old = this.one<QueuedMessage>('SELECT * FROM messages WHERE sender=? AND key=?', actor.id, data.key);
+    if (old) {
+      const legacyMatch = old.legacy && data.priority==='normal' && !data.urgentReason && data.delayMs===0 && data.ttlMs===86400000 && old.digest===hash(JSON.stringify([data.to,data.body,data.replyTo??null]));
+      if (old.digest !== digest && !legacyMatch) fail('idempotency_conflict'); return this.message(old.id);
+    }
+    if (!this.one('SELECT id FROM sessions WHERE id=? AND workspace=? AND revoked=0', data.to, actor.workspace)) fail('not_found');
+    if (data.replyTo && !this.one('SELECT id FROM messages WHERE id=? AND workspace=? AND recipient=? AND sender=?', data.replyTo, actor.workspace, actor.id, data.to)) fail('invalid_reply');
+    const now = decisionTime;
+    const due = now + Math.max(queuePolicy.delay_ms[data.priority], data.delayMs);
+    if (now + data.ttlMs <= due) fail('expiry_before_delivery');
+    this.maintain(data.to, now);
+    if (data.priority==='urgent' && this.one<{n:number}>("SELECT count(*) n FROM messages WHERE sender=? AND priority='urgent' AND created_ms>?", actor.id, now-queuePolicy.urgent_window_ms)!.n >= queuePolicy.urgent_limit) fail('urgent_quota_exceeded');
+    const count = this.one<{ n: number }>("SELECT count(*) n FROM messages WHERE recipient=? AND status IN ('queued','in_flight')", data.to)!.n;
+    if (count >= queuePolicy.capacity) fail('inbox_full');
+    const messageId = randomUUID();
+    this.run("INSERT INTO messages(id,workspace,sender,recipient,body,reply_to,created_at,key,digest,status,priority,urgent_reason,created_ms,due_at,expires_at,legacy) VALUES(?,?,?,?,?,?,?,?,?,'queued',?,?,?,?,?,0)", messageId, actor.workspace, actor.id, data.to, data.body, data.replyTo ?? null, new Date(now).toISOString(), data.key, digest, data.priority, data.urgentReason??null, now, due, now+data.ttlMs);
+    this.event(actor.workspace, 'message.queued', messageId);
+    return this.message(messageId);
   }
   private message(messageId: string) { return this.one<Message>('SELECT seq,id,workspace,sender,recipient,body,reply_to,status,created_at FROM messages WHERE id=?', messageId)!; }
   inbox(actor: Session, after = 0, limit = 10) {
@@ -117,6 +130,7 @@ export class Store {
     return { id: row.id, ...range(row.body, offset, limit) };
   }
   private maintain(recipient: string, now: number) {
+    this.requests.expireWithinTransaction(now);
     const rows=this.all<QueuedMessage>("SELECT * FROM messages WHERE recipient=? AND status IN ('queued','in_flight')",recipient);
     for (const row of rows) {
       if (row.expires_at!==null && row.expires_at<=now) {
@@ -170,7 +184,8 @@ export class Store {
         this.event(actor.workspace,'message.delivered',row.id);
         // Cap escaped JSON as well as UTF-8 bytes, so a batch fits the HTTP budget.
         const text=encodedPreview(row.body,600);
-        return {id:row.id,seq:row.seq,sender:row.sender,body:text,body_bytes:Buffer.byteLength(row.body),truncated:text!==row.body,reply_to:row.reply_to,priority:row.priority,urgent_reason:row.urgent_reason?encodedPreview(row.urgent_reason,300):null,receipt,lease_until:lease,attempts:row.attempts+1,status:'in_flight'};
+        const linked=this.requests.messageMetadata(row.id);
+        return {...(linked?{request_id:linked.request_id,message_kind:linked.kind}:{}),id:row.id,seq:row.seq,sender:row.sender,body:text,body_bytes:Buffer.byteLength(row.body),truncated:text!==row.body,reply_to:row.reply_to,priority:row.priority,urgent_reason:row.urgent_reason?encodedPreview(row.urgent_reason,300):null,receipt,lease_until:lease,attempts:row.attempts+1,status:'in_flight'};
       });
       return {items,...this.summary(actor,now)};
     });
@@ -260,7 +275,7 @@ export class Store {
   clearCache(actor: Session) { return { deleted: Number(this.run('DELETE FROM cache WHERE workspace=?', actor.workspace).changes) }; }
   events(actor: Session, after = 0, limit = 20) {
     z.number().int().min(0).parse(after); z.number().int().min(1).max(50).parse(limit);
-    const rows = this.all<{ seq: number; kind: string; entity: string; created_at: string }>('SELECT seq,kind,entity,created_at FROM events WHERE workspace=? AND seq>? ORDER BY seq LIMIT ?', actor.workspace, after, limit + 1);
+    const rows = this.all<{ seq: number; kind: string; entity: string; created_at: string }>('SELECT e.seq,e.kind,e.entity,e.created_at FROM events e WHERE e.workspace=? AND e.seq>? AND NOT EXISTS (SELECT 1 FROM request_messages rm JOIN requests r ON r.id=rm.request_id WHERE rm.message_id=e.entity AND r.creator<>? AND r.recipient<>?) ORDER BY e.seq LIMIT ?', actor.workspace, after, actor.id,actor.id,limit + 1);
     const items = rows.slice(0, limit); return { items, next: items.at(-1)?.seq ?? after, has_more: rows.length > limit };
   }
   record(actor: Session, taskId: string) {
