@@ -6,7 +6,7 @@ type Options={cwd:string;env:NodeJS.ProcessEnv;timeoutMs:number;maxBytes:number}
 export class OwnedNativeCommand {
  readonly result:Promise<{stdout:string;stderr:string}>;
  readonly pid:number|undefined;
- #child:ChildProcess;#closed=false;#retired=false;#closing:Promise<void>|undefined;
+ #child:ChildProcess;#closed=false;#retired=false;#groupGone=false;#closing:Promise<void>|undefined;
  constructor(command:string,args:string[],options:Options){
   const child=this.#child=spawn(command,args,{cwd:options.cwd,env:options.env,detached:true,stdio:['ignore','pipe','pipe']});this.pid=child.pid;
   const out:Buffer[]=[],err:Buffer[]=[];let bytes=0,failed=false,finished=false;
@@ -27,9 +27,9 @@ export class OwnedNativeCommand {
  }
  private async retire(){
   const deadline=Date.now()+1500;
-  const gone=()=>{if(!this.pid)return this.#closed;try{process.kill(-this.pid,0);return false;}catch(error){return (error as NodeJS.ErrnoException).code==='ESRCH';}};
+  const gone=()=>{if(this.#groupGone)return true;if(!this.pid)return this.#closed;try{process.kill(-this.pid,0);return false;}catch(error){if((error as NodeJS.ErrnoException).code==='ESRCH'){this.#groupGone=true;return true;}return false;}};
   // Only the detached group created here is addressed. EPERM is uncertainty.
-  while(Date.now()<deadline){const absent=gone();if(this.#closed&&absent){this.#retired=true;return;}if(this.pid&&!absent){try{process.kill(-this.pid,'SIGKILL');}catch(error){if(!['ESRCH','EPERM'].includes((error as NodeJS.ErrnoException).code??''))fail('native_command_cleanup_unknown');}}await delay(10);}
+  while(Date.now()<deadline){const absent=gone();if(this.#closed&&absent){this.#retired=true;return;}if(this.pid&&!absent){try{process.kill(-this.pid,'SIGKILL');}catch(error){if((error as NodeJS.ErrnoException).code==='ESRCH')this.#groupGone=true;else if((error as NodeJS.ErrnoException).code!=='EPERM')fail('native_command_cleanup_unknown');}}await delay(10);}
   fail('native_command_cleanup_unknown');
  }
 }
