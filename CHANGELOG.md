@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-alpha.15 — 2026-10-05
+
+- Add a fresh owned OpenCode1.18.34 factory with clean private environment, pre-spawn macOS boundary and ownership fence before native bootstrap.
+- Wait for the owned child to announce its fixed listener before sending Basic authentication; reject listener conflicts, bounded-output violations and a global bootstrap deadline.
+- Create a selected-model build session with fixed deny-all permission and owner marker; verify exact single-session scope, empty history, idle status and no MCP connections, including readiness rechecks.
+- Confirm process-group disappearance and pipe close before releasing ownership; unknown cleanup remains fenced and cannot be automatically adopted.
+- Installed official host bootstrap and cleanup pass without model calls, credential copies or existing resume. Provider network/auth, model-tool authority, controller/deadline integration and heterogeneous model exchanges remain unverified; no automatic wake is enabled.
+
 ## 0.1.0-alpha.14 — 2026-10-05
 
 - Add an internal experimental macOS command compiler that applies a deny-default OS boundary before native configuration bootstrap, with selected private input/runtime roots and a separate owner profile.
