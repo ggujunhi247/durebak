@@ -4,6 +4,7 @@ import { resolveHarness, legacyProvider } from './harnesses/registry.js';
 import { harnessCatalog } from './harnesses/catalog.js';
 import { version } from './version.js';
 import { createSetup } from './setup.js';
+import {installSkills} from './skills.js';
 import { doctor } from './doctor.js';
 import { parseArgs } from 'node:util';
 import { openSync, closeSync, writeFileSync, unlinkSync, realpathSync, readFileSync } from 'node:fs';
@@ -25,6 +26,7 @@ const help = `Durebak ${version} — local cooperative session bus
   durebak revoke SESSION_ID [--data-dir PATH]      Revoke a session credential
   durebak mcp --session FILE                      Start session-scoped MCP stdio bridge
   durebak call OPERATION --session FILE [--json JSON | --input FILE]
+  durebak skills --harness codex|claude-code|opencode|all --workspace PATH  Install project skill/command without credentials
   durebak setup --harness codex|claude-code|opencode --session FILE --out FILE
   durebak managed-bind SESSION_ID --harness codex --native-id ID --profile PROFILE --instance ID --key KEY --out FILE [--data-dir PATH]
   durebak managed-policy --json JSON [--data-dir PATH]  Administrator-only policy configuration (no host execution)
@@ -50,6 +52,7 @@ async function main() {
   const command = positionals[0];
   if (values.version) { process.stdout.write(version+'\n'); return; }
   if (values.help || !command) { process.stdout.write(help); return; }
+  if(command==='skills'){output(installSkills(required(values.harness,'harness'),required(values.workspace,'workspace')));return;}
   if (command === 'harnesses') { output(harnessCatalog()); return; }
   const selectedDirectory = () => dataDirectory(values['data-dir']);
   if (command === 'paths') {

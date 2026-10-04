@@ -89,3 +89,7 @@ npm run lab
 제품명은 **두레박**, 영문 브랜드와 CLI 식별자는 **Durebak / durebak**입니다.
 
 메시지 전달 정책: [큐·중요도·대기·확인 규칙](docs/QUEUE-POLICY.md). 새 클라이언트는 `receive`와 `ack(id,receipt)`를 사용한다.
+
+### 협업 스킬 (개발 소스)
+
+`durebak skills --harness all --workspace PROJECT`로 Codex·Claude Code·OpenCode용 공통 협업 안내와 호출 entry point를 설치합니다. Codex는 `$durebak`, Claude Code/OpenCode는 `/durebak`에서 요청·받기·응답·검증을 진행합니다. 각 세션의 별도 MCP/credential 연결은 필요하며 자동 native 깨우기는 아직 지원하지 않습니다. [설치·사용 계약](docs/USAGE.md#협업-스킬과-커맨드-schema10-개발-소스)을 참고하세요.

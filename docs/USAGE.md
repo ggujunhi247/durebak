@@ -301,3 +301,21 @@ Binding은 같은 runtime 안에서 선언된 profile/native ID의 중복 소유
 정책 변경에는 현재 version과 고유 key가 필요합니다. 기본 off, 최대 총30 turns·동시3·60분입니다. off 상태의 TTL 설정은 보존하며 최초 enable부터 만료를 계산합니다. enable 이후 TTL 변경·만료된 scope의 재활성화는 거부합니다. off/on·재시작·같은 key 재시도는 scope와 사용량을 초기화하지 않습니다. 관측한 만료와 시각은 DB에 남고, 시계 역행이나 owner lease 만료 시 execution은 unknown으로 유지됩니다. lease 만료는 native 실행 중단 근거가 아닙니다.
 
 세션 HTTP/MCP의 `managed_status`는 자기 설정만 조회하며 native ID·owner credential을 반환하지 않습니다. 설정이 enabled여도 `auto_wake:false`, `host_readiness:unverified`, `host_stopped:unknown`입니다. 세션 bearer로 grant/binding을 만들 수 없습니다.
+
+### 협업 스킬과 커맨드 (schema10 개발 소스)
+
+```sh
+durebak skills --harness all --workspace PROJECT
+```
+
+기존 프로젝트에 credential 없는 공통 협업 안내를 설치합니다. 특정 도구만 필요하면 `all` 대신 `codex`, `claude-code`, `opencode`를 지정합니다. Codex/OpenCode는 `.agents/skills/durebak`, Claude Code는 `.claude/skills/durebak`를 사용하고, OpenCode에는 `.opencode/commands/durebak.md`도 생성합니다. OpenCode가 Claude 호환 경로도 발견할 수 있으므로 두 위치의 공통 내용은 동일하게 유지합니다. 도구 버전과 설정에 따라 목록 새로고침 또는 새 세션이 필요할 수 있습니다.
+
+- Codex: `$durebak ask 동료에게 선택한 코드 검토 요청`, `$durebak inbox`, `$durebak verify`.
+- Claude Code/OpenCode: `/durebak ask 동료에게 선택한 코드 검토 요청`, `/durebak inbox`, `/durebak verify`.
+- 공통 동작: `check`, `status`, `inbox`, `ask`, `reply`, `verify` 또는 같은 의도의 자연어 요청.
+
+스킬은 연결 확인·동료 조회·공유 preview·요청·receipt ACK·별도 수락·원문 조회·private revision·self_reported evidence·checkpoint 복구를 안내합니다. 커맨드 인자는 셸 코드로 실행하지 않습니다. 각 세션은 같은 runtime/workspace에서 별도 identity와 private credential/MCP bridge를 사용해야 합니다. 스킬 설치는 session 등록이나 MCP 연결을 수행하지 않으며 설정/credential을 안내문에 기록하지 않습니다. 먼저 위 register/setup/doctor 절차로 각 도구를 연결하거나, 세션별 `DUREBAK_SESSION_FILE`과 CLI `call`을 사용하세요.
+
+동일한 생성 파일은 수정 없이 재사용합니다. 이미 수정한 파일과의 충돌은 `skill_conflict`로 중단하고, symlink 경로도 거부합니다. 이전 버전 스킬과 다르면 변경 내용을 비교·백업한 뒤 설치 대상을 명시적으로 정리해야 합니다. 설치 실패는 이 실행이 새로 만든 파일만 정리하며 다른 작성자의 파일을 삭제하지 않습니다. 글로벌 설정과 기존 호스트 설정은 덮어쓰지 않습니다.
+
+이 경로들은 [Codex 공식 스킬 문서](https://developers.openai.com/codex/skills/), [Claude Code 공식 스킬 문서](https://code.claude.com/docs/en/skills), [OpenCode 공식 스킬](https://opencode.ai/docs/skills/) 및 [커맨드 문서](https://opencode.ai/docs/commands/)에 근거합니다. 생성·프로토콜 검증과 실제 호스트의 skill discovery/모델 호출 검증은 구분합니다. 자동 native 깨우기·중복 없는 활성 세션 연결은 이 설치 기능의 검증 범위가 아닙니다.
