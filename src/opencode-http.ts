@@ -14,6 +14,7 @@ interface Route {path:string;method:'GET'|'POST';body?:unknown;status:number}
 export class OpencodeHttp {
  #authorization:string;#origin:string;#cwd:string;#timeout:number;#maxBytes:number;#maxPending:number;#closed=false;#pending=new Set<(code:string)=>void>();
  constructor(raw:unknown){const parsed=optionsSchema.safeParse(raw);if(!parsed.success)fail('http_invalid_options');const options=parsed.data;let url:URL;try{url=new URL(options.url);}catch{fail('http_invalid_origin');}if(url.protocol!=='http:'||url.hostname!=='127.0.0.1'||!url.port||url.username||url.password||url.pathname!=='/'||url.search||url.hash)fail('http_invalid_origin');this.#origin=url.origin;try{this.#cwd=realpathSync.native(options.cwd);}catch{fail('http_invalid_options');}this.#authorization='Basic '+Buffer.from('opencode:'+options.password).toString('base64');this.#timeout=options.timeoutMs;this.#maxBytes=options.maxResponseBytes;this.#maxPending=options.maxPending;}
+ get metadata(){return Object.freeze({origin:this.#origin,cwd:this.#cwd});}
  private route(operation:Operation,input:unknown):Route {
   const plain:Partial<Record<Operation,string>>={health:'/global/health',config:'/config',agents:'/agent',skills:'/skill',providers:'/provider',sessions:'/session'};
   if(Object.hasOwn(plain,operation)){z.object({}).strict().parse(input??{});return {path:plain[operation]!,method:'GET',status:200};}

@@ -1,0 +1,75 @@
+import {DatabaseSync} from 'node:sqlite';
+import {closeSync,constants,lstatSync,openSync,realpathSync} from 'node:fs';
+import {join} from 'node:path';
+import {randomBytes} from 'node:crypto';
+import {z} from 'zod';
+import {OpencodeHttp} from './opencode-http.js';
+import {NativeProfileFence} from './native-profile-fence.js';
+import {observeOpencodeTurn,type OpencodeOutcome} from './opencode-outcomes.js';
+import {fail,hash,short} from './domain.js';
+import {transaction} from './transactions.js';
+import {range} from './content.js';
+const bindingSchema=z.object({bindingId:short,epoch:z.number().int().positive(),instance:short,profile:short,nativeId:z.string().regex(/^ses_[A-Za-z0-9]+$/).max(200)}).strict();
+const identitySchema=bindingSchema.extend({attemptId:short,sourceDigest:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
+type Binding=z.infer<typeof bindingSchema>;type Identity=z.infer<typeof identitySchema>;
+interface Options {binding:Binding;providerId:string;modelId:string}
+type State='prepared'|'submitting'|'unknown'|'running'|'succeeded'|'failed'|'stopped'|'not_accepted';
+interface Intent {attempt_id:string;source_digest:string;message_id:string;state:State;accepted:number;acknowledged:number;post_settled:number;stop_requested:number;abort_claimed:number;abort_settled:number;output_id:string|null;error_code:string|null}
+const terminal=(state:State)=>['succeeded','failed','stopped','not_accepted'].includes(state);
+const messageSchema=z.object({info:z.object({id:short,sessionID:short,role:z.enum(['user','assistant']),parentID:short.optional(),model:z.object({providerID:short,modelID:short}).optional()}).passthrough(),parts:z.array(z.unknown()).max(256)});
+type Message=z.infer<typeof messageSchema>;
+// Internal intent/receipt layer: caller-owned fresh hosts only; no controller
+// authority, native wake, model entitlement or OS tool-scope assertion.
+export class OpencodeTurns {
+ private db:DatabaseSync;private ownerId:string;private closed=false;private submissions=new Set<string>();private binding:Binding;private providerId:string;private modelId:string;
+ constructor(private fence:NativeProfileFence,private http:OpencodeHttp,options:Options){
+  this.binding=bindingSchema.parse(options.binding);this.providerId=short.parse(options.providerId);this.modelId=short.parse(options.modelId);this.ownerId=fence.status().id;this.assertOwner();
+  const file=join(fence.profile,'.durebak-opencode-turns.sqlite');let fresh=false;
+  try{const fd=openSync(file,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);closeSync(fd);fresh=true;}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')fail('native_ledger_unavailable');const stat=lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1||(stat.mode&0o077)!==0||stat.uid!==process.getuid?.())fail('native_ledger_unsafe');}
+  this.db=new DatabaseSync(file);const scope=hash(JSON.stringify({owner:this.ownerId,binding:this.binding,transport:http.metadata,providerId:this.providerId,modelId:this.modelId}));
+  try{
+   if(fresh)transaction(this.db,()=>{this.db.exec("CREATE TABLE scope(digest TEXT NOT NULL) STRICT; CREATE TABLE turns(attempt_id TEXT PRIMARY KEY,source_digest TEXT NOT NULL,message_id TEXT UNIQUE NOT NULL,state TEXT NOT NULL CHECK(state IN ('prepared','submitting','unknown','running','succeeded','failed','stopped','not_accepted')),accepted INTEGER NOT NULL DEFAULT 0,acknowledged INTEGER NOT NULL DEFAULT 0,post_settled INTEGER NOT NULL DEFAULT 0,stop_requested INTEGER NOT NULL DEFAULT 0,abort_claimed INTEGER NOT NULL DEFAULT 0,abort_settled INTEGER NOT NULL DEFAULT 0,output_id TEXT,error_code TEXT) STRICT; CREATE UNIQUE INDEX single_active_turn ON turns((1)) WHERE state IN ('prepared','submitting','running','unknown'); CREATE TABLE outputs(attempt_id TEXT PRIMARY KEY,message_id TEXT NOT NULL,text TEXT NOT NULL CHECK(length(CAST(text AS BLOB)) BETWEEN 1 AND 65536),digest TEXT NOT NULL CHECK(length(digest)=64)) STRICT; PRAGMA user_version=1;");this.db.prepare('INSERT INTO scope VALUES(?)').run(scope);});
+   this.db.exec('PRAGMA synchronous=FULL; PRAGMA journal_mode=DELETE;');const rows=this.db.prepare('SELECT digest FROM scope').all();if((this.db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version!==1||rows.length!==1||rows[0]?.digest!==scope)fail('native_ledger_scope_conflict');this.db.prepare('SELECT * FROM turns LIMIT 0').all();this.db.prepare('SELECT * FROM outputs LIMIT 0').all();
+  }catch{this.db.close();fail('native_ledger_invalid');}
+ }
+ private assertOwner(){if(this.closed)fail('native_driver_closed');const owner=this.fence.status();if(owner.id!==this.ownerId||owner.state!=='owned'||owner.epoch!==this.binding.epoch||owner.instance!==this.binding.instance||owner.native_id!==this.binding.nativeId||this.fence.profile!==this.binding.profile)fail('driver_identity_mismatch');}
+ private identity(raw:Identity){const id=identitySchema.parse(raw);this.assertOwner();for(const key of ['bindingId','epoch','instance','profile','nativeId'] as const)if(id[key]!==this.binding[key])fail('driver_identity_mismatch');return id;}
+ private row(id:Identity){const row=this.db.prepare('SELECT * FROM turns WHERE attempt_id=?').get(id.attemptId) as unknown as Intent|undefined;if(!row)fail('native_intent_missing');if(row.source_digest!==id.sourceDigest)fail('idempotency_conflict');return row;}
+ private outcome(id:Identity,row=this.row(id)){return {attemptId:id.attemptId,epoch:id.epoch,instance:id.instance,sourceDigest:id.sourceDigest,messageId:row.message_id,outputMessageId:row.output_id,acknowledged:!!row.acknowledged,accepted:row.accepted?true:row.state==='not_accepted'?false:null,stopRequested:!!row.stop_requested,abortAcknowledged:!!row.abort_settled,state:['prepared','submitting'].includes(row.state)?'unknown' as const:row.state,...(row.error_code?{errorCode:row.error_code}:{})};}
+ private unknown(id:Identity){this.assertOwner();this.db.prepare("UPDATE turns SET state='unknown' WHERE attempt_id=? AND state IN ('running','unknown')").run(id.attemptId);return this.outcome(id);}
+ private verifyInput(message:Message,row:Intent){if(!message.info.model||message.info.model.providerID!==this.providerId||message.info.model.modelID!==this.modelId)fail('native_model_mismatch');const texts=message.parts.map(raw=>{const part=z.object({id:short,sessionID:short,messageID:short,type:z.literal('text'),text:z.string(),synthetic:z.literal(false).optional(),ignored:z.literal(false).optional()}).parse(raw);if(part.sessionID!==this.binding.nativeId||part.messageID!==row.message_id)fail('native_input_mismatch');return part;});if(texts.length!==1||hash(texts[0]!.text)!==row.source_digest)fail('native_input_mismatch');}
+ private async history(){
+  const session=z.object({id:short,directory:short}).parse(await this.http.call('session',{nativeId:this.binding.nativeId}));this.assertOwner();if(session.id!==this.binding.nativeId||realpathSync.native(session.directory)!==this.http.metadata.cwd)fail('native_session_conflict');const parsed=z.array(messageSchema).max(256).parse(await this.http.call('messages',{nativeId:this.binding.nativeId}));this.assertOwner();if(new Set(parsed.map(m=>m.info.id)).size!==parsed.length)fail('native_messages_ambiguous');
+  const known=this.db.prepare('SELECT * FROM turns').all() as unknown as Intent[];for(const message of parsed){if(message.info.sessionID!==this.binding.nativeId)fail('native_session_conflict');const row=known.find(row=>row.message_id===(message.info.role==='user'?message.info.id:message.info.parentID));if(!row||row.state==='prepared'||row.state==='not_accepted')fail('native_history_conflict');if(message.info.role==='user')this.verifyInput(message,row);}return parsed;
+ }
+ private async preflight(){const health=z.object({healthy:z.literal(true),version:z.literal('1.18.34')}).parse(await this.http.call('health'));this.assertOwner();await this.history();return health.healthy;}
+ async health(){this.assertOwner();try{await this.preflight();const active=this.db.prepare("SELECT attempt_id FROM turns WHERE state IN ('prepared','submitting','running','unknown')").get();return {contact:'ready' as const,readiness:active?'busy' as const:'unknown' as const,auth:'unknown' as const,entitlement:'unverified' as const};}catch{this.assertOwner();return {contact:'unknown' as const,readiness:'unknown' as const,auth:'unknown' as const,entitlement:'unverified' as const};}}
+ async submit(raw:Identity,source:string){
+  const id=this.identity(raw);if(typeof source!=='string'||!Buffer.byteLength(source)||Buffer.byteLength(source)>16384||hash(source)!==id.sourceDigest)fail('source_changed');
+  transaction(this.db,()=>{if(this.db.prepare('SELECT attempt_id FROM turns WHERE attempt_id=?').get(id.attemptId))fail('submission_uncertain');if(this.db.prepare('SELECT attempt_id FROM turns WHERE abort_claimed=1 AND abort_settled=0').get())fail('native_abort_unresolved');if(this.db.prepare("SELECT attempt_id FROM turns WHERE state IN ('prepared','submitting','running','unknown')").get())fail('native_busy');if((this.db.prepare('SELECT count(*) n FROM turns').get() as {n:number}).n>=30)fail('native_turn_limit');const messageId='msg_'+(BigInt(Date.now())*4096n).toString(16).padStart(12,'0')+randomBytes(7).toString('hex');this.db.prepare("INSERT INTO turns(attempt_id,source_digest,message_id,state) VALUES(?,?,?,'prepared')").run(id.attemptId,id.sourceDigest,messageId);});
+  this.submissions.add(id.attemptId);
+  try{await this.preflight();}catch{this.assertOwner();if(this.row(id).state==='not_accepted')return this.outcome(id);this.db.prepare("UPDATE turns SET state='not_accepted' WHERE attempt_id=? AND state='prepared'").run(id.attemptId);fail('host_unknown');}
+  this.assertOwner();if(this.db.prepare("UPDATE turns SET state='submitting' WHERE attempt_id=? AND state='prepared' AND stop_requested=0").run(id.attemptId).changes!==1)return this.outcome(id);
+  let acknowledged=false;try{await this.http.call('submit',{nativeId:id.nativeId,messageId:this.row(id).message_id,providerId:this.providerId,modelId:this.modelId,text:source});acknowledged=true;}catch{/* A lost receipt is not permission to repeat a POST. */}
+  this.assertOwner();this.db.prepare("UPDATE turns SET acknowledged=?,post_settled=1,state=CASE WHEN state='submitting' THEN 'unknown' ELSE state END WHERE attempt_id=?").run(acknowledged?1:0,id.attemptId);
+  return this.row(id).stop_requested?this.interrupt(id):this.outcome(id);
+ }
+ private save(id:Identity,result:OpencodeOutcome){
+  return transaction(this.db,()=>{this.assertOwner();const row=this.row(id);if(terminal(row.state))return this.outcome(id,row);const state=result.state==='unknown'&&row.state==='submitting'?'submitting':result.state;
+   if(result.state==='succeeded'){if(!result.output||!result.messageId)fail('native_output_invalid');this.db.prepare('INSERT INTO outputs VALUES(?,?,?,?)').run(id.attemptId,result.messageId,result.output.text,result.output.digest);}
+   this.db.prepare('UPDATE turns SET state=?,accepted=1,output_id=?,error_code=? WHERE attempt_id=?').run(state,result.messageId??null,result.errorCode??null,id.attemptId);return this.outcome(id);
+  });
+ }
+ private async observeOnly(raw:Identity){const id=this.identity(raw),row=this.row(id);if(terminal(row.state)||row.state==='prepared')return this.outcome(id,row);let messages:Message[],result:OpencodeOutcome;try{messages=await this.history();if(!messages.some(m=>m.info.role==='user'&&m.info.id===row.message_id))return this.unknown(id);result=observeOpencodeTurn(messages,{nativeId:id.nativeId,messageId:row.message_id,providerId:this.providerId,modelId:this.modelId});}catch{this.assertOwner();return this.unknown(id);}return this.save(id,result);}
+ async observe(raw:Identity){const id=this.identity(raw),result=await this.observeOnly(id),row=this.row(id);return row.stop_requested&&!row.abort_claimed&&result.state==='running'?this.interrupt(id):result;}
+ async interrupt(raw:Identity){
+  const id=this.identity(raw),row=this.row(id);if(terminal(row.state))return this.outcome(id,row);if(row.state==='prepared'){this.db.prepare("UPDATE turns SET state='not_accepted',stop_requested=1 WHERE attempt_id=? AND state='prepared'").run(id.attemptId);return this.outcome(id);}
+  this.db.prepare('UPDATE turns SET stop_requested=1 WHERE attempt_id=?').run(id.attemptId);const observed=await this.observeOnly(id),fresh=this.row(id);if(terminal(fresh.state)||!fresh.accepted||observed.state!=='running')return observed;
+  // Whole-session abort needs fresh scoped history, not a cached accepted flag.
+  try{const messages=await this.history();if(!messages.some(m=>m.info.role==='user'&&m.info.id===fresh.message_id))return this.unknown(id);const result=observeOpencodeTurn(messages,{nativeId:id.nativeId,messageId:fresh.message_id,providerId:this.providerId,modelId:this.modelId});if(terminal(result.state))return this.save(id,result);if(result.state!=='running')return this.unknown(id);}catch{this.assertOwner();return this.unknown(id);}
+  if(this.db.prepare("UPDATE turns SET abort_claimed=1 WHERE attempt_id=? AND abort_claimed=0 AND state IN ('submitting','running','unknown')").run(id.attemptId).changes!==1)return this.outcome(id);
+  try{const result=await this.http.call('abort',{nativeId:id.nativeId});this.assertOwner();if(result!==true)return this.unknown(id);this.db.prepare('UPDATE turns SET abort_settled=1 WHERE attempt_id=? AND abort_claimed=1').run(id.attemptId);}catch{this.assertOwner();return this.unknown(id);}return this.observeOnly(id);
+ }
+ async readOutput(raw:Identity,offset=0,limit=4096){const id=this.identity(raw);z.number().int().min(0).max(65536).parse(offset);z.number().int().min(4).max(4096).parse(limit);const row=this.row(id);if(row.state!=='succeeded'||!row.accepted||!row.output_id)fail('native_output_unavailable');const output=z.object({message_id:short,text:z.string(),digest:z.string().regex(/^[a-f0-9]{64}$/)}).parse(this.db.prepare('SELECT * FROM outputs WHERE attempt_id=?').get(id.attemptId));if(output.message_id!==row.output_id||hash(output.text)!==output.digest||!Buffer.byteLength(output.text)||Buffer.byteLength(output.text)>65536)fail('native_output_invalid');return {...this.outcome(id),digest:output.digest,...range(output.text,offset,limit)};}
+ close(){if(this.closed)return;this.closed=true;try{transaction(this.db,()=>{for(const attempt of this.submissions){this.db.prepare("UPDATE turns SET state='not_accepted' WHERE attempt_id=? AND state='prepared'").run(attempt);this.db.prepare("UPDATE turns SET state='unknown' WHERE attempt_id=? AND state IN ('submitting','running')").run(attempt);}});}finally{this.db.close();}}
+}
