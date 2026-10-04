@@ -19,7 +19,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts tests/*.test.mjs",
+    "test": "node --import tsx --test --test-reporter=tap --test-timeout=30000 tests/*.test.ts tests/*.test.mjs",
     "package:check": "npm run build && node scripts/check-package.mjs",
     "prepack": "npm run build",
     "repo:check": "node scripts/check-repository.mjs",
