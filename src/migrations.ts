@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { fail } from './domain.js';
 import { transaction } from './transactions.js';
 
-export const schemaVersion = 5;
+export const schemaVersion = 6;
 
 // Preserve released migration SQL and append new versions at the end.
 export function migrate(db: DatabaseSync) {
@@ -120,6 +120,16 @@ export function migrate(db: DatabaseSync) {
             PRIMARY KEY(session_id,consumer)
           ) STRICT;
           PRAGMA user_version=5;
+        `);
+      }
+      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 6) {
+        db.exec(`
+          CREATE TABLE request_previews (
+            id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES sessions(id), payload TEXT NOT NULL,
+            digest TEXT NOT NULL, created_ms INTEGER NOT NULL, expires_at INTEGER NOT NULL
+          ) STRICT;
+          CREATE INDEX preview_owner ON request_previews(owner,expires_at);
+          PRAGMA user_version=6;
         `);
       }
     });

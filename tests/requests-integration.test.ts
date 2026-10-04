@@ -19,7 +19,13 @@ test('HTTP and real MCP share request ACL, delivery, completion and recovery che
  t.after(async()=>{await mcp.close();await runtime.close();rmSync(root,{recursive:true,force:true});});
  await mcp.connect(new StdioClientTransport({command:process.execPath,args:[resolve('dist/cli.js'),'mcp','--session',file],stderr:'pipe'}));
  const call=async(name:string,args:Record<string,unknown>)=>{const result=z.object({isError:z.boolean().optional(),content:z.array(z.object({text:z.string()})).min(1)}).parse(await mcp.callTool({name:`durebak_${name}`,arguments:args}));assert.equal(result.isError,undefined,JSON.stringify(result.content));return JSON.parse(result.content[0]!.text);};
- const q=await http(a.token,'request_create',{to:b.session.id,body:'untrusted peer question',key:'q',priority:'urgent',urgentReason:'test immediate eligibility'});
+ const input={to:b.session.id,body:'untrusted peer question',key:'q',priority:'urgent',urgentReason:'test immediate eligibility'};
+ const preview=await http(a.token,'request_preview',{request:input});
+ await assert.rejects(http(c.token,'request_preview_read',{id:preview.id}),/not_found/);
+ assert.equal((await http(a.token,'request_preview_read',{id:preview.id})).content,input.body);
+ const workerPreview=await call('request_preview',{request:{to:a.session.id,body:'worker preview',key:'preview'}});
+ assert.equal((await call('request_preview_read',{id:workerPreview.id})).content,'worker preview');
+ const q=await http(a.token,'request_create',{...input,previewId:preview.id});
  assert.equal((await call('request_messages',{id:q.id})).items.length,0);
  await assert.rejects(http(c.token,'request_get',{id:q.id}),/not_found/);
  const received=await call('receive',{});assert.equal(received.items[0].request_id,q.id);

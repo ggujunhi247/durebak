@@ -240,3 +240,11 @@ setup 출력의 scope=config_fragment는 설정 파일 조각의 생성 범위�
 이 기능은 Cooperative 복구 계약입니다. 같은 native 세션의 자동 깨우기·재개, Managed/Attached 실행은 아직 지원하지 않습니다.
 
 요청 메타데이터의 bounded 응답을 보장하기 위해 workspace의 JSON 인코딩 크기가 4 KiB를 넘으면 `request_create`는 `request_scope_too_large`로 거부합니다. 기존 일반 메시지 계약은 유지합니다.
+
+### 요청 공유 미리보기 (alpha.4)
+
+`request_preview`에 `{ "request": { "to": "SESSION_ID", "body": "보낼 본문", "key": "고유키" } }`를 전달하면 발신자·수신자·`request-private` 범위, 본문 digest/크기/미리보기, 60초 유효한 ID와 잠정 전달/응답 기한을 반환합니다. 파일이나 과거 대화를 자동 수집하지 않습니다. 현재 미리보기는 명시적인 본문 요청에 한정하며 첨부·task는 지원하지 않습니다.
+
+`request_preview_read`의 `id/offset/limit`으로 발신자만 원문을 범위 조회할 수 있습니다. `request_create`에 같은 요청 내용과 `previewId`를 넣으면 전송 직전에 정규화된 내용·수신자·권한·유효기간과 실제 큐 정책을 재검사합니다. 미리보기는 선택 사항이고 전송·읽음·수락·모델 실행을 하지 않습니다. 본문이 달라지면 `preview_conflict`, 만료 시 `preview_expired`입니다. 성공한 같은 key의 재시도는 만료 뒤에도 기존 요청을 반환합니다.
+
+`recipient_paused`, `recipient_busy`, `inbox_full`은 관측 당시 경고입니다. `host_readiness_unknown`은 실제 호스트 준비 여부가 미확인임을 뜻합니다. 기한은 실제 전송 시각에 고정하므로 미리보기의 기한은 예상값입니다. 세션당 미만료 미리보기는 20개로 제한합니다.
