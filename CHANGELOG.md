@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-alpha.6 — 2026-10-04
+
+- Add shared collaboration skills for Codex, Claude Code and OpenCode, with an OpenCode command and a credential-free project installer.
+- Add explicit session onboarding, bounded full-source reads, sharing previews, acceptance, cancellation and revision-aware verification guidance.
+- Add administrator-managed runtime-local native bindings, owner leases and disabled-by-default policies with durable expiry and clock rollback protection.
+- Add internal complete work-input preparation with private attachment validation, revision evidence and queued request-prefix context.
+- Preserve existing sessions and private requests through the additive schema9→10 migration.
+- Validate 198 regression tests, six-direction three-session MCP exchanges, installed package skill reuse and Codex 0.146.0 skill discovery without model execution.
+
+Managed execution, atomic work reservation and automatic native wake remain future work. Claude Code/OpenCode native skill discovery and actual heterogeneous model execution remain unverified. GitHub delivery and npm registry publication are tracked separately.
+
 ## 0.1.0-alpha.5 — 2026-10-04
 
 - Add request-linked protected tasks with participant/delivery ACLs and dual request/task versions.
