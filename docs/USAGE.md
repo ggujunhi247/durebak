@@ -229,7 +229,7 @@ setup 출력의 scope=config_fragment는 설정 파일 조각의 생성 범위�
 
 `runtime_info.capabilities`의 `request_threads_v1`, `request_controls_v1`, `consumer_checkpoints_v1`을 먼저 확인하세요. 기능이 없는 daemon에서 기존 send로 조용히 대체하지 않습니다. CLI의 `durebak call OPERATION --session FILE --json JSON`과 같은 이름의 `durebak_OPERATION` MCP 도구가 동일 계약을 사용합니다.
 
-- `request_create`: `{ "to":"PEER_ID", "body":"검토할 명시적 본문", "key":"review-1", "deadlineMs":600000 }`. 기본 normal 메시지는5초 뒤 전달 가능하므로 기한은 전달 시각보다 길어야 합니다. 첨부와 기존 task 연결은 이 단계에서 지원하지 않습니다.
+- `request_create`: `{ "to":"PEER_ID", "body":"검토할 명시적 본문", "key":"review-1", "deadlineMs":600000 }`. 기본 normal 메시지는5초 뒤 전달 가능하므로 기한은 전달 시각보다 길어야 합니다. alpha.5에서는 선택적 uploads와 새 보호 task를 함께 생성할 수 있습니다. 기존 task ID의 연결은 지원하지 않습니다.
 - `receive`에 `request_id`와 `message_kind`가 있으면 해당 요청입니다. 실제 읽음은 기존 receipt 기반 `ack`를 사용합니다. `request_transition`의 `{ "id":"REQUEST_ID", "version":1, "state":"accepted" }`는 별도 수락입니다.
 - `request_message`: `{ "id":"REQUEST_ID", "version":2, "kind":"result", "body":"결과 본문", "key":"result-1" }`. answer/note/result를 구분합니다. 동일 key의 동일 제출은 재시도할 수 있고 변경된 제출은 conflict입니다. 늦은 result는 감사 자료이며 종료된 요청을 다시 완료하지 않습니다.
 - 생성자는 expected version으로 cancelled를, 수신자는 rejected/failed를 설정할 수 있습니다. 거절/실패에는 `reasonCode`와 `detail`이 필요합니다. 기한은 pause·daemon 중단 중에도 연장되지 않습니다.
@@ -243,33 +243,33 @@ setup 출력의 scope=config_fragment는 설정 파일 조각의 생성 범위�
 
 ### 요청 공유 미리보기 (alpha.4)
 
-`request_preview`에 `{ "request": { "to": "SESSION_ID", "body": "보낼 본문", "key": "고유키" } }`를 전달하면 발신자·수신자·`request-private` 범위, 본문 digest/크기/미리보기, 60초 유효한 ID와 잠정 전달/응답 기한을 반환합니다. 파일이나 과거 대화를 자동 수집하지 않습니다. 현재 미리보기는 명시적인 본문 요청에 한정하며 첨부·task는 지원하지 않습니다.
+`request_preview`에 `{ "request": { "to": "SESSION_ID", "body": "보낼 본문", "key": "고유키" } }`를 전달하면 발신자·수신자·`request-private` 범위, 본문 digest/크기/미리보기, 60초 유효한 ID와 잠정 전달/응답 기한을 반환합니다. 파일이나 과거 대화를 자동 수집하지 않습니다. alpha.5 소스는 명시적 본문과 선택적 보호 작업·upload 첨부를 지원하며 각 내용과 공유 범위를 검증합니다.
 
 `request_preview_read`의 `id/offset/limit`으로 발신자만 원문을 범위 조회할 수 있습니다. `request_create`에 같은 요청 내용과 `previewId`를 넣으면 전송 직전에 정규화된 내용·수신자·권한·유효기간과 실제 큐 정책을 재검사합니다. 미리보기는 선택 사항이고 전송·읽음·수락·모델 실행을 하지 않습니다. 본문이 달라지면 `preview_conflict`, 만료 시 `preview_expired`입니다. 성공한 같은 key의 재시도는 만료 뒤에도 기존 요청을 반환합니다.
 
 `recipient_paused`, `recipient_busy`, `inbox_full`은 관측 당시 경고입니다. `host_readiness_unknown`은 실제 호스트 준비 여부가 미확인임을 뜻합니다. 기한은 실제 전송 시각에 고정하므로 미리보기의 기한은 예상값입니다. 세션당 미만료 미리보기는 20개로 제한합니다.
 
-### 보호된 요청 작업 (개발 중)
+### 보호된 요청 작업 (alpha.5)
 
 `request_create`에 선택적 `task: { title, criteria }`를 넣으면 새 작업 하나가 요청과 원자적으로 생성됩니다. 기존 task ID는 연결할 수 없습니다. 작업은 같은 두 참여자만 조회하고, 수신자는 최초 메시지가 전달된 뒤에 제목·기준을 볼 수 있습니다. `request_get`의 task 상태/version은 request 상태/version과 별개입니다. `request_task_read`의 id는 request ID이며 기준 원문을 bounded 범위로 반환합니다.
 
 보호 작업의 `request_transition`과 결과 `request_message`에는 `expectedTaskVersion`을 전달합니다. 수락은 수신자를 owner로 고정하고, 취소·거절·실패·기한 만료는 작업도 종료합니다. 종료가 owner를 자동 해제하지 않습니다. 보호 작업의 기존 `task_claim/complete/cancel`은 `linked_request_operation_required`로 거부합니다. 기존 공개 작업은 기존 계약을 유지합니다.
 
-현재 보호 작업 결과에는 기존 `artifact_put`으로 저장한 `hash`가 필요합니다. 이 산출물은 **workspace-visible**이며 작업의 private 범위로 바뀌지 않습니다. request task summary의 `result_visibility`에 그 범위를 표시합니다. request-private 첨부·revision·재검증 evidence는 후속 기능입니다. 완료는 결과 제출이고 실제 검증 통과가 아닙니다.
+revision 없는 보호 작업 결과에는 기존 `artifact_put`으로 저장한 `hash`가 필요합니다. 이 산출물은 **workspace-visible**이며 작업의 private 범위로 바뀌지 않습니다. request task summary의 `result_visibility`에 그 범위를 표시합니다. request-private 결과에는 아래 revision API를 사용합니다. 완료는 결과 제출이고 실제 검증 통과가 아닙니다.
 
-공유 preview는 작업 제목·기준 digest까지 포함합니다. preview owner가 `request_preview_read`에 `part: "criteria"`를 넣으면 기준 원문을 확인할 수 있고, 기준이 바뀐 전송은 `preview_conflict`입니다. 이 개발 내용은 이미 배포한 alpha.4에 소급 적용되지 않습니다.
+공유 preview는 작업 제목·기준 digest까지 포함합니다. preview owner가 `request_preview_read`에 `part: "criteria"`를 넣으면 기준 원문을 확인할 수 있고, 기준이 바뀐 전송은 `preview_conflict`입니다. 이 기능은 alpha.5 소스에 추가되며 기존 alpha.4 파일에 소급 적용되지 않습니다.
 
-### 요청 전용 텍스트 첨부 (개발 중)
+### 요청 전용 텍스트 첨부 (alpha.5)
 
 `attachment_put {name,content,key}`는 명시적 텍스트(64 KiB 이하)를 소유자 전용 불변 upload로 저장합니다. `attachment_upload_read {id,offset,limit}`는 소유자만 원문을 읽습니다. `request_create` 또는 `request_message`에 선택적 `uploads: [UPLOAD_ID]`(최대10개)를 넣으면 메시지와 원자적으로 request-private handle을 만듭니다. `request_attachments`의 id는 request ID이고, `attachment_read`의 id는 반환된 handle ID입니다. 수신자는 해당 메시지가 실제 전달된 뒤에만 handle과 본문을 볼 수 있습니다. 원래 upload ID 접근은 부여하지 않습니다.
 
 legacy `artifact_read(hash)`와 workspace cache로 private 원본을 읽을 수 없습니다. 다만 같은 내용의 공개 artifact가 이미 있다면 미리보기와 handle metadata의 `public_copy_exists`가 true입니다. 공개본을 삭제하거나 내용 자체가 비밀이라고 표시하지 않습니다. preview는 첨부 ID·내용·이름·범위까지 묶어 검사하고, 새 공개본이 생기는 등 공유 범위가 바뀌면 새 preview가 필요합니다.
 
-미공유 upload는 소유자당20개, 요청 첨부는100개/총1MiB입니다. 공유된 원본은 감사 기록으로 보존하며 미공유 quota에서 제외합니다. 오래된 원본 보존 기간 정리는 후속 기능입니다. 전체 디렉터리나 native 대화를 자동 수집하지 않습니다. 이 개발 내용은 배포된 alpha.4에 포함되지 않습니다.
+미공유 upload는 소유자당20개, 요청 첨부는100개/총1MiB입니다. 공유된 원본은 감사 기록으로 보존하며 미공유 quota에서 제외합니다. 오래된 원본 보존 기간 정리는 후속 기능입니다. 전체 디렉터리나 native 대화를 자동 수집하지 않습니다. 이 기능은 alpha.5 소스에 추가되며 배포된 alpha.4에 포함되지 않습니다.
 
 취소·기한 만료된 요청의 늦은 결과는 첨부 없는 본문만 감사 기록으로 받을 수 있습니다. 비어 있지 않은 `uploads`는 `terminal_attachment_forbidden`으로 거부하며 조용히 첨부를 생략하지 않습니다.
 
-### 결과 revision과 재검증 (개발 중)
+### 결과 revision과 재검증 (alpha.5)
 
 수락한 보호 작업의 owner는 `attachment_put`으로 명시적 결과를 저장한 뒤 `request_revision {id,version,expectedTaskVersion,uploadId,key}`로 제출합니다. 요청 version은 그대로이고 작업 version만 증가합니다. revision은 고정 기준의 SHA-256 digest와 원문 hash를 갖는 불변 기록입니다. 생성 시 정상 지연의 note와 비공개 handle이 원자적으로 생깁니다. 상대방은 해당 메시지를 `receive`한 뒤 `request_revisions {id,after,limit}`와 `attachment_read`로 조회합니다.
 
@@ -279,9 +279,9 @@ revision이 있는 작업의 결과 `request_message`에는 최신 hash와 작�
 
 `request_verification {id}`는 `unverified`, `reported_pass`, `failed`, `needs_revalidation`, `waiting_delivery`를 반환합니다. 최신 revision의 활성 실패가 하나라도 있으면 실패이며 통과와 공존하면 conflict입니다. 이전 revision 보고만 있으면 재검증이 필요합니다. 이것은 두레박이 명령을 실행했다는 증명이 아닙니다. `request_evidence_list`는 본문 없는 metadata 페이지, `request_evidence_read`는 procedure 원문 범위 조회입니다.
 
-`request_bundle {id}`는 목표·기준 미리보기, 정확한 기준 digest, 전달된 최신 revision, 검증 상태와 필요한 원문 참조를 모델 호출 없이 묶습니다. `source_complete:false`이므로 작업 전에 required_sources를 모두 읽어야 합니다. 승인·ACK·수락·호스트 wake를 하지 않습니다. 이 개발 내용은 배포된 alpha.4에 소급 적용되지 않습니다.
+`request_bundle {id}`는 목표·기준 미리보기, 정확한 기준 digest, 전달된 최신 revision, 검증 상태와 필요한 원문 참조를 모델 호출 없이 묶습니다. `source_complete:false`이므로 작업 전에 required_sources를 모두 읽어야 합니다. 승인·ACK·수락·호스트 wake를 하지 않습니다. alpha.5 소스 기능이며 배포된 alpha.4에는 소급 적용되지 않습니다.
 
-### 협업 상태 화면 (개발 중)
+### 협업 상태 화면 (alpha.5)
 
 `durebak dashboard --session FILE`은 한 번의 읽기 전용 CLI 화면으로 세션별 도구·선언된 availability·bridge 연락 상태, 자신이 참여한 요청의 상태/version·기한·재검증 상태를 보여줍니다. 본문·작업 제목·기준·artifact hash·credential·사용자 경로는 표시하지 않습니다. bridge fresh는 실제 모델 준비·진행 증거가 아니며 host readiness/progress는 unknown입니다.
 

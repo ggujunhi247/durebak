@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.0-alpha.5 — 2026-10-04
+
+- Add request-linked protected tasks with participant/delivery ACLs and dual request/task versions.
+- Add immutable owner uploads and message-scoped private attachment handles, sharing previews and public-copy disclosure.
+- Add immutable private result revisions, latest-revision completion and result-reference redaction until delivery.
+- Add revision-bound self-reported verification evidence, author-specific supersession, failure/conflict reporting and revalidation after changes.
+- Add bounded deterministic context bundles with full-source and attachment/message pagination references.
+- Add one-shot CLI collaboration dashboard and shared HTTP/MCP status, distinguishing bridge contact from unknown host readiness.
+- Preserve existing credentials, requests, previews, tasks and private sources through additive schema6→7→8→9 migrations.
+- Regress hidden-evidence cursor loss, completion quota exhaustion, missing input references, terminal control escaping and deadline snapshot consistency.
+- Validate 168 tests, type checks, package allowlist, independently installed package smoke and Linux/macOS feature CI.
+
+Evidence remains self-reported; native automatic wake, browser UI and actual heterogeneous host execution remain outside verified support. Source version and GitHub delivery do not imply successful npm registry publishing.
+
 ## 0.1.0-alpha.4 — 2026-10-04
 
 - Add private two-participant request conversations, fixed deadlines and versioned acceptance/result/termination.
