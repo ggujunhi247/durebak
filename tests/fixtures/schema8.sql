@@ -1,14 +1,5 @@
-import type { DatabaseSync } from 'node:sqlite';
-import { fail } from './domain.js';
-import { transaction } from './transactions.js';
+-- Snapshot of schema 8 SQL from d0f1f520; independent of current migrations.
 
-export const schemaVersion = 9;
-
-// Preserve released migration SQL and append new versions at the end.
-export function migrate(db: DatabaseSync) {
-    const version = (db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version;
-    if (version > schemaVersion) { fail('unsupported_database_version'); }
-    db.exec(`
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY, workspace TEXT NOT NULL, alias TEXT NOT NULL, provider TEXT NOT NULL,
         token_hash TEXT NOT NULL UNIQUE, revoked INTEGER NOT NULL DEFAULT 0, UNIQUE(workspace, alias)
@@ -39,10 +30,8 @@ export function migrate(db: DatabaseSync) {
         touched INTEGER NOT NULL, PRIMARY KEY(workspace,key)
       ) STRICT;
 
-    `);
-    transaction(db, () => {
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 2) {
-        db.exec(`
+    
+
           ALTER TABLE sessions ADD COLUMN availability TEXT NOT NULL DEFAULT 'available';
           ALTER TABLE messages ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal';
           ALTER TABLE messages ADD COLUMN urgent_reason TEXT;
@@ -60,10 +49,8 @@ export function migrate(db: DatabaseSync) {
           CREATE INDEX queue_idx ON messages(recipient,status,due_at);
           CREATE INDEX urgent_idx ON messages(sender,priority,created_ms);
           PRAGMA user_version=2;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 3) {
-        db.exec(`
+        
+
           CREATE TABLE delivery_audit (
             cursor INTEGER PRIMARY KEY AUTOINCREMENT,
             message_id TEXT NOT NULL UNIQUE REFERENCES messages(id),
@@ -73,10 +60,8 @@ export function migrate(db: DatabaseSync) {
           INSERT INTO delivery_audit(message_id,recipient)
             SELECT id,recipient FROM messages WHERE delivered_at IS NOT NULL ORDER BY delivered_at,seq;
           PRAGMA user_version=3;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 4) {
-        db.exec(`
+        
+
           CREATE TABLE session_activity (
             session_id TEXT PRIMARY KEY REFERENCES sessions(id), last_activity_ms INTEGER NOT NULL
           ) STRICT;
@@ -86,10 +71,8 @@ export function migrate(db: DatabaseSync) {
             PRIMARY KEY(session_id,instance)
           ) STRICT;
           PRAGMA user_version=4;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 5) {
-        db.exec(`
+        
+
           CREATE TABLE requests (
             id TEXT PRIMARY KEY, workspace TEXT NOT NULL, creator TEXT NOT NULL REFERENCES sessions(id),
             recipient TEXT NOT NULL REFERENCES sessions(id), message_id TEXT NOT NULL REFERENCES messages(id),
@@ -120,28 +103,22 @@ export function migrate(db: DatabaseSync) {
             PRIMARY KEY(session_id,consumer)
           ) STRICT;
           PRAGMA user_version=5;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 6) {
-        db.exec(`
+        
+
           CREATE TABLE request_previews (
             id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES sessions(id), payload TEXT NOT NULL,
             digest TEXT NOT NULL, created_ms INTEGER NOT NULL, expires_at INTEGER NOT NULL
           ) STRICT;
           CREATE INDEX preview_owner ON request_previews(owner,expires_at);
           PRAGMA user_version=6;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 7) {
-        db.exec(`
+        
+
           CREATE TABLE request_tasks (
             request_id TEXT PRIMARY KEY REFERENCES requests(id), task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id)
           ) STRICT;
           PRAGMA user_version=7;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 8) {
-        db.exec(`
+        
+
           CREATE TABLE private_uploads (
             id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES sessions(id), workspace TEXT NOT NULL,
             name TEXT NOT NULL, hash TEXT NOT NULL, content TEXT NOT NULL, bytes INTEGER NOT NULL,
@@ -155,30 +132,4 @@ export function migrate(db: DatabaseSync) {
           CREATE INDEX scoped_attachment_request ON request_attachment_handles(request_id,cursor);
           ALTER TABLE request_previews ADD COLUMN attachment_digest TEXT;
           PRAGMA user_version=8;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 9) {
-        db.exec(`
-          CREATE TABLE task_revisions (
-            cursor INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
-            request_id TEXT NOT NULL REFERENCES requests(id), task_id TEXT NOT NULL REFERENCES tasks(id),
-            upload_id TEXT NOT NULL REFERENCES private_uploads(id), handle_id TEXT NOT NULL REFERENCES request_attachment_handles(id),
-            message_id TEXT NOT NULL REFERENCES messages(id), hash TEXT NOT NULL, criteria_digest TEXT NOT NULL,
-            author TEXT NOT NULL REFERENCES sessions(id), key TEXT NOT NULL, digest TEXT NOT NULL,
-            created_ms INTEGER NOT NULL, task_version INTEGER NOT NULL, UNIQUE(request_id,author,key)
-          ) STRICT;
-          CREATE TABLE verification_evidence (
-            cursor INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
-            request_id TEXT NOT NULL REFERENCES requests(id), revision_id TEXT NOT NULL REFERENCES task_revisions(id),
-            author TEXT NOT NULL REFERENCES sessions(id), key TEXT NOT NULL, digest TEXT NOT NULL,
-            attempt TEXT NOT NULL, procedure TEXT NOT NULL, result TEXT NOT NULL,
-            started_at INTEGER NOT NULL, ended_at INTEGER NOT NULL, supersedes TEXT REFERENCES verification_evidence(id),
-            created_ms INTEGER NOT NULL, UNIQUE(request_id,author,key), UNIQUE(request_id,author,attempt), UNIQUE(supersedes)
-          ) STRICT;
-          ALTER TABLE request_tasks ADD COLUMN result_revision_id TEXT REFERENCES task_revisions(id);
-          ALTER TABLE request_tasks ADD COLUMN result_message_id TEXT REFERENCES messages(id);
-          PRAGMA user_version=9;
-        `);
-      }
-    });
-}
+        

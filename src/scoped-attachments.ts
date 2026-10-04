@@ -32,10 +32,11 @@ export class ScopedAttachments {
  }
  preview(actor:Session,ids:string[]=[]){return this.manifest(actor,ids).map(u=>({...u,name:encodedPreview(u.name,100),name_truncated:u.name!==encodedPreview(u.name,100)}));}
  uploadRead(actor:Session,id:string,offset=0,limit=4096){const u=this.upload(actor,id);return {id:u.id,name:u.name,hash:u.hash,...range(u.content,offset,limit)};}
- link(actor:Session,q:CollaborationRequest,messageId:string,ids:string[]=[]){
+ link(actor:Session,q:CollaborationRequest,messageId:string,ids:string[]=[],reserveUploadId?:string,finalResult=false){
   const manifest=this.manifest(actor,ids);if(!manifest.length)return;
   const used=this.db.prepare('SELECT count(*) n,coalesce(sum(u.bytes),0) bytes FROM request_attachment_handles h JOIN private_uploads u ON u.id=h.upload_id WHERE h.request_id=?').get(q.id) as {n:number;bytes:number};
-  if(used.n+manifest.length>100||used.bytes+manifest.reduce((n,u)=>n+u.bytes,0)>1048576)fail('attachment_capacity_exceeded');
+  const reserved=finalResult?undefined:reserveUploadId?this.db.prepare('SELECT bytes FROM private_uploads WHERE id=?').get(reserveUploadId) as {bytes:number}|undefined:this.db.prepare("SELECT u.bytes FROM task_revisions r JOIN private_uploads u ON u.id=r.upload_id WHERE r.request_id=? ORDER BY r.cursor DESC LIMIT 1").get(q.id) as {bytes:number}|undefined;
+  if(used.n+manifest.length+(reserved?1:0)>100||used.bytes+manifest.reduce((n,u)=>n+u.bytes,0)+(reserved?.bytes??0)>1048576)fail('attachment_capacity_exceeded');
   for(const u of manifest)this.db.prepare('INSERT INTO request_attachment_handles(id,request_id,message_id,upload_id) VALUES(?,?,?,?)').run(randomUUID(),q.id,messageId,u.id);
  }
  list(actor:Session,q:CollaborationRequest,after=0,limit=10){

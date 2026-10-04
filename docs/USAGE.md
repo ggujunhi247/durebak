@@ -268,3 +268,15 @@ legacy `artifact_read(hash)`와 workspace cache로 private 원본을 읽을 수 
 미공유 upload는 소유자당20개, 요청 첨부는100개/총1MiB입니다. 공유된 원본은 감사 기록으로 보존하며 미공유 quota에서 제외합니다. 오래된 원본 보존 기간 정리는 후속 기능입니다. 전체 디렉터리나 native 대화를 자동 수집하지 않습니다. 이 개발 내용은 배포된 alpha.4에 포함되지 않습니다.
 
 취소·기한 만료된 요청의 늦은 결과는 첨부 없는 본문만 감사 기록으로 받을 수 있습니다. 비어 있지 않은 `uploads`는 `terminal_attachment_forbidden`으로 거부하며 조용히 첨부를 생략하지 않습니다.
+
+### 결과 revision과 재검증 (개발 중)
+
+수락한 보호 작업의 owner는 `attachment_put`으로 명시적 결과를 저장한 뒤 `request_revision {id,version,expectedTaskVersion,uploadId,key}`로 제출합니다. 요청 version은 그대로이고 작업 version만 증가합니다. revision은 고정 기준의 SHA-256 digest와 원문 hash를 갖는 불변 기록입니다. 생성 시 정상 지연의 note와 비공개 handle이 원자적으로 생깁니다. 상대방은 해당 메시지를 `receive`한 뒤 `request_revisions {id,after,limit}`와 `attachment_read`로 조회합니다.
+
+revision이 있는 작업의 결과 `request_message`에는 최신 hash와 작업 version이 필요합니다. 최신 결과 upload는 결과 메시지에도 연결되며, 결과 전달 전에는 요청·legacy task/record 조회의 result hash를 숨깁니다. revision 없는 작업은 기존 workspace-visible artifact 결과를 유지합니다.
+
+`request_evidence {id,revisionId,procedure,result,attempt,key,startedAt,endedAt,supersedes?}`는 정확한 revision에 대한 **self_reported** 통과/실패 보고입니다. 시간은 밀리초 단위이고 종료는 시작 이후·현재 이전이어야 합니다. `attempt`는 작성자별 요청 안에서 고유합니다. 동일 작성자의 동일 revision 보고만 새 attempt로 supersede할 수 있고 전체 이력을 보존합니다. 다른 참여자의 실패 보고를 지울 수 없습니다. 요청당 최대100개입니다. 완료된 결과에도 근거를 추가할 수 있지만 취소·만료 후 새 보고는 거부합니다.
+
+`request_verification {id}`는 `unverified`, `reported_pass`, `failed`, `needs_revalidation`, `waiting_delivery`를 반환합니다. 최신 revision의 활성 실패가 하나라도 있으면 실패이며 통과와 공존하면 conflict입니다. 이전 revision 보고만 있으면 재검증이 필요합니다. 이것은 두레박이 명령을 실행했다는 증명이 아닙니다. `request_evidence_list`는 본문 없는 metadata 페이지, `request_evidence_read`는 procedure 원문 범위 조회입니다.
+
+`request_bundle {id}`는 목표·기준 미리보기, 정확한 기준 digest, 전달된 최신 revision, 검증 상태와 필요한 원문 참조를 모델 호출 없이 묶습니다. `source_complete:false`이므로 작업 전에 required_sources를 모두 읽어야 합니다. 승인·ACK·수락·호스트 wake를 하지 않습니다. 이 개발 내용은 배포된 alpha.4에 소급 적용되지 않습니다.

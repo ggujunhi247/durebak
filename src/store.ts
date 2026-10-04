@@ -7,6 +7,7 @@ import { openDatabase } from './database.js';
 import { transaction } from './transactions.js';
 import { encodedPreview, preview, range } from './content.js';
 import {ScopedAttachments,attachmentPutSchema} from './scoped-attachments.js';
+import {Verification,revisionSchema,evidenceSchema} from './verification.js';
 import {ProtectedTasks} from './protected-tasks.js';
 import {RequestPreviewRepository} from './request-preview.js';
 import { RequestRepository,requestPayloadSchema,requestCreateSchema,requestMessageSchema,checkpointSchema,type RequestState } from './requests.js';
@@ -24,12 +25,14 @@ export class Store {
   private readonly requests: RequestRepository;
   private readonly attachments:ScopedAttachments;
   private readonly protectedTasks:ProtectedTasks;
+  private readonly verification:Verification;
   private readonly previews: RequestPreviewRepository;
   constructor(readonly directory: string, private readonly clock = { now: () => Date.now() }) {
     this.db = openDatabase(directory);
     this.attachments=new ScopedAttachments(this.db);
     this.protectedTasks=new ProtectedTasks(this.db);
     this.previews=new RequestPreviewRepository(this.db,this.clock,this.attachments);
+    this.verification=new Verification(this.db,this.clock,(actor,id)=>this.requests.get(actor,id));
     this.requests=new RequestRepository(this.db,this.clock,(actor,input,now)=>this.enqueue(actor,input,now),(actor,id,payload,now)=>this.previews.validate(actor,id,payload,now),this.protectedTasks,this.attachments);
   }
   close() { if (!this.closed) { this.db.close(); this.closed = true; } }
@@ -96,6 +99,13 @@ export class Store {
   requestPreview(actor:Session,input:z.input<typeof requestPayloadSchema>){return this.previews.create(actor,input);}
   requestPreviewRead(actor:Session,id:string,offset=0,limit=4096,part:'body'|'criteria'='body'){return this.previews.read(actor,id,offset,limit,part);}
   requestCreate(actor:Session,input:z.input<typeof requestCreateSchema>){return this.requests.create(actor,input);}
+  requestRevision(actor:Session,input:z.input<typeof revisionSchema>){return this.requests.revision(actor,input);}
+  requestRevisions(actor:Session,id:string,after=0,limit=10){return this.verification.list(actor,id,after,limit);}
+  requestEvidence(actor:Session,input:z.input<typeof evidenceSchema>){return this.verification.add(actor,input);}
+  requestEvidenceList(actor:Session,id:string,after=0,limit=10){return this.verification.evidence(actor,id,after,limit);}
+  requestEvidenceRead(actor:Session,id:string,offset=0,limit=4096){return this.verification.read(actor,id,offset,limit);}
+  requestBundle(actor:Session,id:string){return this.verification.bundle(actor,id);}
+  requestVerification(actor:Session,id:string){return this.verification.status(actor,id);}
   requestTaskRead(actor:Session,id:string,offset=0,limit=4096){return this.requests.taskRead(actor,id,offset,limit);}
   requestGet(actor:Session,id:string){return this.requests.get(actor,id);}
   requestList(actor:Session,after='',limit=10){return this.requests.list(actor,after,limit);}
@@ -238,7 +248,7 @@ export class Store {
     if(this.db.isTransaction)this.requests.expireWithinTransaction();else this.requests.expire();
     this.protectedTasks.authorize(actor,taskId);
     const task = this.one<Task>('SELECT id,workspace,creator,title,criteria,state,owner,version,result_hash,created_at FROM tasks WHERE id=? AND workspace=?', taskId, actor.workspace);
-    if (!task) fail('not_found'); return task;
+    if (!task) fail('not_found'); return this.protectedTasks.redactResult(actor,task);
   }
   tasks(actor: Session, after = '', limit = 10) {
     this.requests.expire();
@@ -302,8 +312,11 @@ export class Store {
   }
   record(actor: Session, taskId: string) {
     const task = this.getTask(actor, taskId);
+    const linked=this.one<{request_id:string}>('SELECT request_id FROM request_tasks WHERE task_id=?',taskId);
+    const verification=linked?this.requestVerification(actor,linked.request_id):null;
     // No model call; the database, not this Markdown projection, remains authoritative.
-    const text = `# ${task.title}\n\nTask: ${task.id}\nState: ${task.state}\nRevision: ${task.version}\nCreated: ${task.created_at}\n\n## Criteria\n\n${task.criteria}\n\n## Result\n\n${task.result_hash ? `sha256:${task.result_hash}` : 'No result submitted.'}\n\nCompletion records the owner’s submission; independent verification is not implemented.\n`;
-    return { task_id: task.id, version: task.version, hash: hash(text), markdown: text, llm_calls: 0 };
+    const text = `# ${task.title}\n\nTask: ${task.id}\nState: ${task.state}\nRevision: ${task.version}\nCreated: ${task.created_at}\n\n## Criteria\n\n${task.criteria}\n\n## Result\n\n${task.result_hash ? `sha256:${task.result_hash}` : task.state==='completed'?'Result submitted; private references await delivery.':'No result submitted.'}\n\nCompletion records the owner’s submission; independent verification is not implemented.\n`;
+    const markdown=verification?`${text}\nVerification: ${verification.status}\nSource: self_reported\nNeeds attention: ${verification.needs_attention}\n`:text;
+    return { task_id: task.id, version: task.version, hash: hash(markdown), markdown, llm_calls: 0 };
   }
 }

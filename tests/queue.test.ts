@@ -136,7 +136,7 @@ test('schema two audit backfill preserves delivered history and pending messages
   advance(5000);const delivered=s.receive(b,1).items[0]!;s.ack(b,first.id,delivered.receipt);
   s.close();
   const db=new DatabaseSync(join(dir,'runtime.sqlite'));
-  db.exec('DROP TABLE request_attachment_handles; DROP TABLE private_uploads; DROP TABLE request_tasks; DROP TABLE request_previews; DROP TABLE consumer_checkpoints; DROP TABLE request_controls; DROP TABLE request_late; DROP TABLE request_messages; DROP TABLE requests; DROP TABLE session_activity; DROP TABLE bridge_observations; DROP TABLE delivery_audit; PRAGMA user_version=2;');db.close();
+  db.exec('DROP TABLE verification_evidence; DROP TABLE task_revisions; DROP TABLE request_attachment_handles; DROP TABLE private_uploads; DROP TABLE request_tasks; DROP TABLE request_previews; DROP TABLE consumer_checkpoints; DROP TABLE request_controls; DROP TABLE request_late; DROP TABLE request_messages; DROP TABLE requests; DROP TABLE session_activity; DROP TABLE bridge_observations; DROP TABLE delivery_audit; PRAGMA user_version=2;');db.close();
   const upgraded=new Store(dir,clock);
   try{
     const page=upgraded.inbox(b);assert.equal(page.cursor_version,2);

@@ -6,6 +6,7 @@ import {transaction} from './transactions.js';
 import {encodedPreview} from './content.js';
 import {ScopedAttachments,uploadsSchema} from './scoped-attachments.js';
 import {ProtectedTasks,type ProtectedTaskSummary} from './protected-tasks.js';
+import {revisionSchema} from './verification.js';
 import {queuePolicy} from './queue-policy.js';
 
 export const requestPayloadSchema=sendSchema.omit({replyTo:true}).extend({deadlineMs:z.number().int().min(1).max(3600000).default(600000),uploads:uploadsSchema,task:taskSchema.omit({key:true}).strict().optional()}).strict();
@@ -127,9 +128,31 @@ export class RequestRepository {
    if(data.kind==='result')this.tasks.apply(q,'completed',data.expectedTaskVersion,data.hash);
    const m=this.enqueue(actor,{to:actor.id===q.creator?q.recipient:q.creator,body:data.body,key:`rq:${hash(JSON.stringify([q.id,data.key,data.kind]))}`,priority:'normal'},now);
    this.run('INSERT INTO request_messages(message_id,request_id,kind,author,key,digest) VALUES(?,?,?,?,?,?)',m.id,q.id,data.kind,actor.id,data.key,digest);
-   this.attachments.link(actor,q,m.id,data.uploads);
+   const latest=data.kind==='result'?this.tasks.latest(q.id):undefined;
+   this.attachments.link(actor,q,m.id,latest?[...new Set([...(data.uploads??[]),latest.upload_id])]:data.uploads,undefined,data.kind==='result');
+   if(latest)this.run('UPDATE request_tasks SET result_message_id=? WHERE request_id=?',m.id,q.id);
    if(data.kind==='result')this.run("UPDATE requests SET state='completed',version=version+1 WHERE id=?",q.id);
    return {id:m.id,request_id:q.id,late:false};
+  });
+ }
+ revision(actor:Session,input:z.input<typeof revisionSchema>){
+  const data=revisionSchema.parse(input);this.expire();
+  return transaction(this.db,()=>{
+   const now=this.clock.now();this.expireWithinTransaction(now);const q=this.visible(actor,data.id),digest=hash(JSON.stringify(data));
+   const old=this.one<{id:string;digest:string}>('SELECT id,digest FROM task_revisions WHERE request_id=? AND author=? AND key=?',q.id,actor.id,data.key);
+   const snapshot=(id:string)=>({...this.one<import('./verification.js').Revision>('SELECT cursor,id,request_id,task_id,handle_id,message_id,hash,criteria_digest,author,created_ms,task_version FROM task_revisions WHERE id=?',id)!,source:'self_reported' as const});
+   if(old){if(old.digest!==digest)fail('idempotency_conflict');return snapshot(old.id);}
+   if(terminal(q.state))fail('request_terminal');if(q.recipient!==actor.id||q.state!=='accepted')fail('request_role_required');if(q.version!==data.version)fail('request_conflict');
+   const task=this.one<{id:string;version:number;criteria:string;owner:string;state:string}>('SELECT t.* FROM request_tasks rt JOIN tasks t ON t.id=rt.task_id WHERE rt.request_id=?',q.id);if(!task)fail('linked_task_required');if(task.version!==data.expectedTaskVersion||task.owner!==actor.id||task.state!=='claimed')fail('task_conflict');
+   const upload=this.attachments.manifest(actor,[data.uploadId])[0]!;
+   const n=this.one<{n:number;bytes:number}>('SELECT count(*) n,coalesce(sum(length(CAST(m.body AS BLOB))),0) bytes FROM request_messages r JOIN messages m ON m.id=r.message_id WHERE r.request_id=?',q.id)!;
+   const body='New result revision available.';if(n.n>=1000||n.bytes+Buffer.byteLength(body)>1048576)fail('conversation_capacity_exceeded');
+   const id=randomUUID(),m=this.enqueue(actor,{to:q.creator,body,key:`revision:${id}`,priority:'normal'},now);
+   this.run("INSERT INTO request_messages(message_id,request_id,kind) VALUES(?,?,'note')",m.id,q.id);this.attachments.link(actor,q,m.id,[data.uploadId],data.uploadId);
+   const handle=this.one<{id:string}>('SELECT id FROM request_attachment_handles WHERE message_id=? AND upload_id=?',m.id,data.uploadId)!;
+   this.run('UPDATE tasks SET version=version+1 WHERE id=?',task.id);
+   this.run('INSERT INTO task_revisions(id,request_id,task_id,upload_id,handle_id,message_id,hash,criteria_digest,author,key,digest,created_ms,task_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',id,q.id,task.id,data.uploadId,handle.id,m.id,upload.hash,hash(task.criteria),actor.id,data.key,digest,now,task.version+1);
+   return snapshot(id);
   });
  }
  controls(actor:Session,after=0,limit=10){

@@ -106,6 +106,6 @@ test('released schema6 fixture preserves an existing request and normalized prev
   const actor={id:'a',workspace:'w',alias:'a',provider:'codex',revoked:0};assert.equal(store.requestGet(actor,'q').message_id,'m');assert.equal(store.requestGet(actor,'q').task,undefined);
   assert.equal(store.requestPreviewRead(actor,'preview').content,'preview body');
   assert.equal(store.requestCreate(actor,{to:'b',body:'preview body',key:'new',previewId:'preview'}).state,'pending');
-  const check=new DatabaseSync(file);try{assert.equal(check.prepare('PRAGMA user_version').get()!.user_version,8);assert.equal(check.prepare('SELECT token_hash FROM sessions WHERE id=?').get('a')!.token_hash,'fixture-a');}finally{check.close();}
+  const check=new DatabaseSync(file);try{assert.equal(check.prepare('PRAGMA user_version').get()!.user_version,9);assert.equal(check.prepare('SELECT token_hash FROM sessions WHERE id=?').get('a')!.token_hash,'fixture-a');}finally{check.close();}
  }finally{store.close();}
 });

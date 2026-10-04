@@ -154,7 +154,7 @@ test('independent released schema4 fixture upgrades while preserving messages, c
  const before=db.prepare('SELECT * FROM messages').get();db.close();
  const store=new Store(dir);try{
   const after=new DatabaseSync(file);try{
-   assert.equal(after.prepare('PRAGMA user_version').get()!.user_version,8);
+   assert.equal(after.prepare('PRAGMA user_version').get()!.user_version,9);
    assert.deepEqual(after.prepare('SELECT * FROM messages').get(),before);
    assert.equal(after.prepare('SELECT token_hash FROM sessions WHERE id=?').get('old-a')!.token_hash,'fixture-credential-hash');
    assert.equal(after.prepare('SELECT cursor FROM delivery_audit').get()!.cursor,17);
