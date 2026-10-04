@@ -267,3 +267,9 @@ Primary contracts: [Apple process and socket metadata](https://github.com/apple-
 ## Native host retirement latch (alpha.17)
 
 Codex and OpenCode owned hosts retain an observed process-group ESRCH for the lifetime of the host. Subsequent shutdown escalation and explicit cleanup retries never inspect or signal that numeric group again, because it may have been reused. Release still requires actual child stdio closure and helper cleanup. EPERM remains uncertain and retains the ownership fence. Regression tests cover inherited pipes, simulated numeric group reuse, explicit retry and persistent permission errors. This lifecycle fix confers no native model verification or automatic wake capability.
+
+## Asynchronous controller readiness (alpha.18)
+
+The internal mock-only execution controller now supports reserveAsync and awaits readiness before submission. Each readiness wait is bounded to five seconds; rejection or timeout blocks submission as host_unknown. Owner and time observations are repeated after the await, then the existing reservation/submission transaction validates current policy digests, source, lease, deadlines, delivery locks and attempt state. No transaction spans the readiness wait. Identical intent replay observes owner/time and returns the original attempt without another readiness probe. Concurrent execution of one reservation submits and records delivery once; cancellation during the wait prevents late submission. Synchronous mock reservation remains available and refuses unresolved readiness.
+
+This establishes the asynchronous preflight contract required for later owned native adapters. Factory-only mock authority remains in force: this change does not connect native controller execution, authenticate a provider, verify model tools, or enable automatic wake.
