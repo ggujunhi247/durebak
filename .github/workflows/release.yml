@@ -51,6 +51,7 @@ jobs:
     with:
       ref: ${{ needs.resolve.outputs.commit }}
   verify:
+    timeout-minutes: 10
     needs: resolve
     strategy:
       matrix:
