@@ -29,3 +29,13 @@ esac
  else{assert.equal(result.status,0,result.stderr);assert.match(commands,/release upload v1.2.3 release\/package.tgz/);}
  assert.doesNotMatch(commands,/release download/);
 });
+
+test('verified GitHub delivery proceeds independently of npm publisher authentication',()=>{
+ const workflow=readFileSync('.github/workflows/release.yml','utf8');
+ const job=workflow.split('  github-release:')[1];
+ assert.ok(job,'missing independent GitHub release job');
+ assert.match(job,/needs: \[artifact, smoke\]/);
+ assert.doesNotMatch(job,/needs:.*publish|environment: npm|id-token: write|npm publish/);
+ assert.match(job,/sha256sum --check SHA256SUMS/);
+ assert.ok(job.includes('cmp "$asset" "$RUNNER_TEMP/existing-assets/$name"'));
+});
