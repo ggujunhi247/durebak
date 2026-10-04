@@ -248,3 +248,13 @@ setup 출력의 scope=config_fragment는 설정 파일 조각의 생성 범위�
 `request_preview_read`의 `id/offset/limit`으로 발신자만 원문을 범위 조회할 수 있습니다. `request_create`에 같은 요청 내용과 `previewId`를 넣으면 전송 직전에 정규화된 내용·수신자·권한·유효기간과 실제 큐 정책을 재검사합니다. 미리보기는 선택 사항이고 전송·읽음·수락·모델 실행을 하지 않습니다. 본문이 달라지면 `preview_conflict`, 만료 시 `preview_expired`입니다. 성공한 같은 key의 재시도는 만료 뒤에도 기존 요청을 반환합니다.
 
 `recipient_paused`, `recipient_busy`, `inbox_full`은 관측 당시 경고입니다. `host_readiness_unknown`은 실제 호스트 준비 여부가 미확인임을 뜻합니다. 기한은 실제 전송 시각에 고정하므로 미리보기의 기한은 예상값입니다. 세션당 미만료 미리보기는 20개로 제한합니다.
+
+### 보호된 요청 작업 (개발 중)
+
+`request_create`에 선택적 `task: { title, criteria }`를 넣으면 새 작업 하나가 요청과 원자적으로 생성됩니다. 기존 task ID는 연결할 수 없습니다. 작업은 같은 두 참여자만 조회하고, 수신자는 최초 메시지가 전달된 뒤에 제목·기준을 볼 수 있습니다. `request_get`의 task 상태/version은 request 상태/version과 별개입니다. `request_task_read`의 id는 request ID이며 기준 원문을 bounded 범위로 반환합니다.
+
+보호 작업의 `request_transition`과 결과 `request_message`에는 `expectedTaskVersion`을 전달합니다. 수락은 수신자를 owner로 고정하고, 취소·거절·실패·기한 만료는 작업도 종료합니다. 종료가 owner를 자동 해제하지 않습니다. 보호 작업의 기존 `task_claim/complete/cancel`은 `linked_request_operation_required`로 거부합니다. 기존 공개 작업은 기존 계약을 유지합니다.
+
+현재 보호 작업 결과에는 기존 `artifact_put`으로 저장한 `hash`가 필요합니다. 이 산출물은 **workspace-visible**이며 작업의 private 범위로 바뀌지 않습니다. request task summary의 `result_visibility`에 그 범위를 표시합니다. request-private 첨부·revision·재검증 evidence는 후속 기능입니다. 완료는 결과 제출이고 실제 검증 통과가 아닙니다.
+
+공유 preview는 작업 제목·기준 digest까지 포함합니다. preview owner가 `request_preview_read`에 `part: "criteria"`를 넣으면 기준 원문을 확인할 수 있고, 기준이 바뀐 전송은 `preview_conflict`입니다. 이 개발 내용은 이미 배포한 alpha.4에 소급 적용되지 않습니다.

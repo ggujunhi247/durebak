@@ -38,12 +38,13 @@ export class RequestPreviewRepository {
    const warnings=['host_readiness_unknown'];
    if(recipient.availability!=='available')warnings.push(`recipient_${recipient.availability}`);
    if((this.db.prepare("SELECT count(*) n FROM messages WHERE recipient=? AND status IN ('queued','in_flight')").get(data.to) as {n:number}).n>=queuePolicy.capacity)warnings.push('inbox_full');
-   return {id,digest,sender:actor.id,recipient:data.to,visibility:'request-private' as const,body:encodedPreview(data.body,400),body_bytes:Buffer.byteLength(data.body),truncated:data.body!==encodedPreview(data.body,400),expires_at,due_at:due,deadline_at:now+data.deadlineMs,timing:'tentative_until_send' as const,warnings};
+   return {id,digest,sender:actor.id,recipient:data.to,visibility:'request-private' as const,body:encodedPreview(data.body,400),body_bytes:Buffer.byteLength(data.body),truncated:data.body!==encodedPreview(data.body,400),expires_at,due_at:due,deadline_at:now+data.deadlineMs,timing:'tentative_until_send' as const,warnings,...(data.task?{task:{title:data.task.title,criteria:encodedPreview(data.task.criteria,400),criteria_bytes:Buffer.byteLength(data.task.criteria),truncated:data.task.criteria!==encodedPreview(data.task.criteria,400)}}:{})};
   });
  }
- read(actor:Session,id:string,offset=0,limit=4096){
+ read(actor:Session,id:string,offset=0,limit=4096,part:'body'|'criteria'='body'){
   const row=this.visible(actor,id);this.valid(row,this.clock.now());
   const data=requestPayloadSchema.parse(JSON.parse(row.payload));
-  return {id,digest:row.digest,...range(data.body,offset,limit)};
+  if(part==='criteria'&&!data.task)fail('not_found');
+  return {id,digest:row.digest,...range(part==='criteria'?data.task!.criteria:data.body,offset,limit)};
  }
 }

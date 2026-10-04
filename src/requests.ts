@@ -1,24 +1,25 @@
 import type {DatabaseSync,SQLInputValue} from 'node:sqlite';
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
-import {sendSchema,short,body,fail,hash,type Session,type Message} from './domain.js';
+import {sendSchema,taskSchema,short,body,fail,hash,type Session,type Message} from './domain.js';
 import {transaction} from './transactions.js';
 import {encodedPreview} from './content.js';
+import {ProtectedTasks,type ProtectedTaskSummary} from './protected-tasks.js';
 import {queuePolicy} from './queue-policy.js';
 
-export const requestPayloadSchema=sendSchema.omit({replyTo:true}).extend({deadlineMs:z.number().int().min(1).max(3600000).default(600000)}).strict();
+export const requestPayloadSchema=sendSchema.omit({replyTo:true}).extend({deadlineMs:z.number().int().min(1).max(3600000).default(600000),task:taskSchema.omit({key:true}).strict().optional()}).strict();
 export const requestCreateSchema=requestPayloadSchema.extend({previewId:short.optional()}).strict();
-export const requestMessageSchema=z.object({id:short,version:z.number().int().positive(),kind:z.enum(['answer','note','result']),body,key:short}).strict();
+export const requestMessageSchema=z.object({id:short,version:z.number().int().positive(),kind:z.enum(['answer','note','result']),body,key:short,expectedTaskVersion:z.number().int().positive().optional(),hash:z.string().regex(/^[a-f0-9]{64}$/).optional()}).strict();
 export const checkpointSchema=z.object({consumer:short,version:z.number().int().min(0),messageCursor:z.number().int().min(0),controlCursor:z.number().int().min(0)}).strict();
 export interface Checkpoint {consumer:string;version:number;message_cursor:number;control_cursor:number}
 export interface ControlNotice {cursor:number;request_id:string;reason:string;created_ms:number;observed_ms:number|null;acked_ms:number|null}
-export const requestTransitionSchema=z.object({id:short,version:z.number().int().positive(),state:z.enum(['accepted','rejected','failed','cancelled']),reasonCode:short.optional(),detail:z.string().min(1).max(4000).refine(v=>Buffer.byteLength(JSON.stringify(v))<=4096).optional()}).strict();
+export const requestTransitionSchema=z.object({id:short,version:z.number().int().positive(),state:z.enum(['accepted','rejected','failed','cancelled']),expectedTaskVersion:z.number().int().positive().optional(),reasonCode:short.optional(),detail:z.string().min(1).max(4000).refine(v=>Buffer.byteLength(JSON.stringify(v))<=4096).optional()}).strict();
 export type RequestState='pending'|'accepted'|'completed'|'rejected'|'failed'|'cancelled'|'timed_out';
-export interface CollaborationRequest {id:string;workspace:string;creator:string;recipient:string;message_id:string;state:RequestState;version:number;created_ms:number;deadline_at:number;reason_code:string|null;detail:string|null}
+export interface CollaborationRequest {id:string;workspace:string;creator:string;recipient:string;message_id:string;state:RequestState;version:number;created_ms:number;deadline_at:number;reason_code:string|null;detail:string|null;task?:ProtectedTaskSummary}
 interface StoredRequest extends CollaborationRequest {key:string;digest:string}
 const terminal=(state:RequestState)=>!['pending','accepted'].includes(state);
 export class RequestRepository {
- constructor(private db:DatabaseSync,private clock:{now():number},private enqueue:(actor:Session,input:z.input<typeof sendSchema>,now:number)=>Message,private validatePreview:(actor:Session,id:string,payload:z.output<typeof requestPayloadSchema>,now:number)=>void){}
+ constructor(private db:DatabaseSync,private clock:{now():number},private enqueue:(actor:Session,input:z.input<typeof sendSchema>,now:number)=>Message,private validatePreview:(actor:Session,id:string,payload:z.output<typeof requestPayloadSchema>,now:number)=>void,private tasks:ProtectedTasks){}
  private one<T>(sql:string,...args:SQLInputValue[]){return this.db.prepare(sql).get(...args) as T|undefined;}
  private all<T>(sql:string,...args:SQLInputValue[]){return this.db.prepare(sql).all(...args) as T[];}
  private run(sql:string,...args:SQLInputValue[]){return this.db.prepare(sql).run(...args);}
@@ -26,7 +27,7 @@ export class RequestRepository {
   const q=this.one<StoredRequest>('SELECT * FROM requests WHERE id=? AND workspace=? AND (creator=? OR recipient=?)',id,actor.workspace,actor.id,actor.id);
   if(!q)fail('not_found');return q;
  }
- private snapshot(q:StoredRequest):CollaborationRequest {const {key:_,digest:__,...result}=q;return result;}
+ private snapshot(q:StoredRequest,actor:Session):CollaborationRequest {const {key:_,digest:__,...result}=q;const task=this.tasks.summary(actor,q);return {...result,...(task?{task}:{})};}
  private notice(q:StoredRequest,reason:string,now:number){
   for(const recipient of [q.creator,q.recipient])this.run('INSERT OR IGNORE INTO request_controls(request_id,recipient,reason,created_ms) VALUES(?,?,?,?)',q.id,recipient,reason,now);
  }
@@ -35,6 +36,7 @@ export class RequestRepository {
   const rows=this.all<StoredRequest>("SELECT * FROM requests WHERE state IN ('pending','accepted') AND deadline_at<=?",now);
   for(const q of rows){
    this.run("UPDATE requests SET state='timed_out',version=version+1 WHERE id=?",q.id);
+   this.tasks.timeout(q.id);
    this.notice(q,'timed_out',now);
    this.run("UPDATE messages SET status='expired',lease_until=NULL WHERE status='queued' AND id IN (SELECT message_id FROM request_messages WHERE request_id=?)",q.id);
   }
@@ -48,7 +50,7 @@ export class RequestRepository {
   const {previewId,...data}=requestCreateSchema.parse(input);const digest=hash(JSON.stringify(data));this.expire();
   return transaction(this.db,()=>{
    const old=this.one<StoredRequest>('SELECT * FROM requests WHERE creator=? AND key=?',actor.id,data.key);
-   if(old){if(old.digest!==digest)fail('idempotency_conflict');return this.snapshot(old);}
+   if(old){if(old.digest!==digest)fail('idempotency_conflict');return this.snapshot(old,actor);}
    if(data.to===actor.id)fail('distinct_participants_required');
    if(this.one<{n:number}>("SELECT count(*) n FROM requests WHERE creator=? AND state IN ('pending','accepted')",actor.id)!.n>=100)fail('request_capacity_exceeded');
    const now=this.clock.now(),deadline=now+data.deadlineMs;
@@ -58,14 +60,16 @@ export class RequestRepository {
    const message=this.enqueue(actor,{to:data.to,body:data.body,key:`request:${id}:initial`,priority:data.priority,...(data.urgentReason?{urgentReason:data.urgentReason}:{}),delayMs:data.delayMs,ttlMs:data.ttlMs},now);
    this.run('INSERT INTO requests(id,workspace,creator,recipient,message_id,created_ms,deadline_at,key,digest) VALUES(?,?,?,?,?,?,?,?,?)',id,actor.workspace,actor.id,data.to,message.id,now,deadline,data.key,digest);
    this.run("INSERT INTO request_messages(message_id,request_id,kind) VALUES(?,?,'question')",message.id,id);
-   return this.snapshot(this.visible(actor,id));
+   if(data.task)this.tasks.create(this.visible(actor,id),data.task,now);
+   return this.snapshot(this.visible(actor,id),actor);
   });
  }
- get(actor:Session,id:string){short.parse(id);this.expire();return this.snapshot(this.visible(actor,id));}
+ taskRead(actor:Session,id:string,offset=0,limit=4096){this.get(actor,id);return this.tasks.read(actor,this.visible(actor,id),offset,limit);}
+ get(actor:Session,id:string){short.parse(id);this.expire();return this.snapshot(this.visible(actor,id),actor);}
  list(actor:Session,after='',limit=10){
   z.string().max(200).parse(after);z.number().int().min(1).max(20).parse(limit);this.expire();
   const rows=this.all<StoredRequest>('SELECT * FROM requests WHERE workspace=? AND (creator=? OR recipient=?) AND id>? ORDER BY id LIMIT ?',actor.workspace,actor.id,actor.id,after,limit+1);
-  const items=rows.slice(0,limit).map(q=>this.snapshot(q));
+  const items=rows.slice(0,limit).map(q=>this.snapshot(q,actor));
   while(items.length>1&&Buffer.byteLength(JSON.stringify(items))>12000)items.pop();
   return {items,next:items.at(-1)?.id??after,has_more:rows.length>items.length};
  }
@@ -78,7 +82,7 @@ export class RequestRepository {
   while(items.length>1&&Buffer.byteLength(JSON.stringify(items))>12000)items.pop();
   return {items,next:items.at(-1)?.seq??after,has_more:rows.length>items.length,waiting_delivery:barrier>=0&&barrier<=items.length};
  }
- transition(actor:Session,id:string,version:number,state:Exclude<RequestState,'pending'|'completed'|'timed_out'>,reason:{reasonCode?:string;detail?:string}={}){
+ transition(actor:Session,id:string,version:number,state:Exclude<RequestState,'pending'|'completed'|'timed_out'>,reason:{reasonCode?:string;detail?:string;expectedTaskVersion?:number}={}){
   const data=requestTransitionSchema.parse({id,version,state,...reason});this.expire();
   return transaction(this.db,()=>{
    const now=this.clock.now();this.expireWithinTransaction(now);
@@ -90,10 +94,11 @@ export class RequestRepository {
     if(state==='failed'?q.state!=='accepted':q.state!=='pending')fail('request_conflict');
    }
    if(['rejected','failed'].includes(state)&&(!data.reasonCode||!data.detail))fail('reason_required');
+   this.tasks.apply(q,state,data.expectedTaskVersion);
    this.run('UPDATE requests SET state=?,version=version+1,reason_code=?,detail=? WHERE id=?',state,data.reasonCode??null,data.detail??null,id);
    if(state==='cancelled')this.notice(q,state,now);
    if(state!=='accepted')this.run("UPDATE messages SET status='expired',lease_until=NULL WHERE status='queued' AND id IN (SELECT message_id FROM request_messages WHERE request_id=?)",id);
-   return this.snapshot(this.visible(actor,id));
+   return this.snapshot(this.visible(actor,id),actor);
   });
  }
  message(actor:Session,input:z.input<typeof requestMessageSchema>){
@@ -115,6 +120,7 @@ export class RequestRepository {
    if(actor.id===q.recipient&&!this.one('SELECT id FROM messages WHERE id=? AND delivered_at IS NOT NULL',q.message_id))fail('message_not_delivered');
    const n=this.one<{n:number;bytes:number}>('SELECT count(*) n,coalesce(sum(length(CAST(m.body AS BLOB))),0) bytes FROM request_messages r JOIN messages m ON m.id=r.message_id WHERE r.request_id=?',q.id)!;
    if(n.n>=1000||n.bytes+Buffer.byteLength(data.body)>1048576)fail('conversation_capacity_exceeded');
+   if(data.kind==='result')this.tasks.apply(q,'completed',data.expectedTaskVersion,data.hash);
    const m=this.enqueue(actor,{to:actor.id===q.creator?q.recipient:q.creator,body:data.body,key:`rq:${hash(JSON.stringify([q.id,data.key,data.kind]))}`,priority:'normal'},now);
    this.run('INSERT INTO request_messages(message_id,request_id,kind,author,key,digest) VALUES(?,?,?,?,?,?)',m.id,q.id,data.kind,actor.id,data.key,digest);
    if(data.kind==='result')this.run("UPDATE requests SET state='completed',version=version+1 WHERE id=?",q.id);

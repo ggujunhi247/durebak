@@ -56,3 +56,9 @@
 alpha.4 공유 미리보기: 발신자 전용 60초 preview와 원문 범위 조회, request_create의 선택적 previewId 검증을 추가했다. 정규화된 본문 요청만 지원하고 첨부·보호 task는 후속이다. 미리보기는 host 준비 확인·전송 승인 권한·읽음 처리·자동 실행이 아니다. schema5→6은 preview 표만 추가한다.
 
 alpha.4 로컬 검증: 전체128개, 타입·57개 package allowlist·독립 설치 smoke·저장소·gitleaks 통과. 별도 reviewer가 preview의 Critical/Important 문제 없음 및42개 집중 시험 통과를 확인했다. CI·registry 게시 상태는 release 결과로 별도 확인한다.
+
+## 다음 단계 개발: request-linked 보호 작업
+
+선택적인 새 task를 request와 원자적으로 생성하고 참여자 ACL·최초 전달 조건을 legacy task 목록/조회/record/events에도 적용한다. legacy mutation은 연결 요청 연산을 요구하며, request/task version을 함께 검사해 수락·결과·종료를 한 transaction에서 반영한다. 결과 hash는 현재 기존 workspace-visible artifact이며 request-private 첨부/revision은 후속이다. schema6→7은 mapping 표를 추가한다. 기존 alpha.4에는 포함되지 않은 개발 내용이다.
+
+2026-10-04 보호 작업 개발 검증: 전체139개·타입·59파일 패키지 allowlist·저장소112파일·gitleaks 통과. 독립 리뷰의 Critical/Important 문제 없음, 집중37개 통과. 실제HTTP/MCP 기준 조회/legacy mutation 차단/양쪽version 수락·완료, storage failure 원자성, 독립released schema6 fixture의 원래 request/preview/credential 보존을 확인했다. 아직 alpha.4 출시 파일에 포함되지 않는다.
