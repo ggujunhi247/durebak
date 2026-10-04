@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { Store } from './store.js';
 import { DomainError, fail, sendSchema, taskSchema, type Session } from './domain.js';
 import { privateDirectory } from './database.js';
+import {revisionSchema,evidenceSchema} from './verification.js';
 import {attachmentPutSchema} from './scoped-attachments.js';
 import {requestPayloadSchema,requestCreateSchema,requestMessageSchema,requestTransitionSchema,checkpointSchema} from './requests.js';
 
@@ -25,6 +26,13 @@ export const operations = {
   request_preview:z.object({request:requestPayloadSchema}).strict(),
   request_preview_read:source.extend({part:z.enum(['body','criteria']).default('body')}),
   request_task_read:source,
+  request_revision:revisionSchema,
+  request_revisions:page.extend({id:identifier}),
+  request_evidence:evidenceSchema,
+  request_evidence_list:page.extend({id:identifier}),
+  request_evidence_read:source,
+  request_bundle:z.object({id:identifier}).strict(),
+  request_verification:z.object({id:identifier}).strict(),
   request_create:requestCreateSchema,
   request_get:z.object({id:identifier}).strict(),
   request_list:z.object({after:z.string().max(200).default(''),limit:z.number().int().min(1).max(20).default(10)}).strict(),
@@ -71,6 +79,13 @@ function dispatch(store: Store, actor: Session, operation: Operation, input: unk
     case 'request_attachments':{const a=operations.request_attachments.parse(input);return store.requestAttachments(actor,a.id,a.after,a.limit);}
     case 'request_preview':return store.requestPreview(actor,operations.request_preview.parse(input).request);
     case 'request_preview_read':{const a=operations.request_preview_read.parse(input);return store.requestPreviewRead(actor,a.id,a.offset,a.limit,a.part);}
+    case 'request_revision':return store.requestRevision(actor,revisionSchema.parse(input));
+    case 'request_revisions':{const a=operations.request_revisions.parse(input);return store.requestRevisions(actor,a.id,a.after,a.limit);}
+    case 'request_evidence':return store.requestEvidence(actor,evidenceSchema.parse(input));
+    case 'request_evidence_list':{const a=operations.request_evidence_list.parse(input);return store.requestEvidenceList(actor,a.id,a.after,a.limit);}
+    case 'request_evidence_read':{const a=source.parse(input);return store.requestEvidenceRead(actor,a.id,a.offset,a.limit);}
+    case 'request_bundle':return store.requestBundle(actor,operations.request_bundle.parse(input).id);
+    case 'request_verification':return store.requestVerification(actor,operations.request_verification.parse(input).id);
     case 'request_task_read':{const a=source.parse(input);return store.requestTaskRead(actor,a.id,a.offset,a.limit);}
     case 'request_create':return store.requestCreate(actor,requestCreateSchema.parse(input));
     case 'request_get':return store.requestGet(actor,operations.request_get.parse(input).id);
@@ -82,7 +97,7 @@ function dispatch(store: Store, actor: Session, operation: Operation, input: unk
     case 'control_ack':return store.controlAck(actor,operations.control_ack.parse(input).cursor);
     case 'checkpoint_get':return store.checkpointGet(actor,operations.checkpoint_get.parse(input).consumer);
     case 'checkpoint_set':return store.checkpointSet(actor,checkpointSchema.parse(input));
-    case 'runtime_info': empty.parse(input); return { version, protocol_version: protocolVersion, schema_version: schemaVersion, session_id: actor.id, daemon_epoch: epoch, capabilities:['session_health_v1','request_threads_v1','request_controls_v1','consumer_checkpoints_v1','request_preview_v1','protected_request_tasks_v1','private_attachments_v1'] };
+    case 'runtime_info': empty.parse(input); return { version, protocol_version: protocolVersion, schema_version: schemaVersion, session_id: actor.id, daemon_epoch: epoch, capabilities:['session_health_v1','request_threads_v1','request_controls_v1','consumer_checkpoints_v1','request_preview_v1','protected_request_tasks_v1','private_attachments_v1','revision_verification_v1'] };
     case 'session_health': {const a=operations.session_health.parse(input);return store.sessionHealth(actor,a.id??actor.id,epoch);}
     case 'bridge_touch': {const a=operations.bridge_touch.parse(input);if(a.epoch!==epoch)fail('daemon_epoch_mismatch');return store.bridgeTouch(actor,a.instance,epoch);}
     case 'bridge_close': {const a=operations.bridge_close.parse(input);if(a.epoch!==epoch)fail('daemon_epoch_mismatch');return store.bridgeClose(actor,a.instance,epoch);}
@@ -161,7 +176,7 @@ export async function startRuntime(directory: string) {
       const actor = store.authenticate(token);
       if (!actor) { respond(res, 401, { error: 'unauthorized' }); return; }
       const input = z.object({ operation: z.enum(Object.keys(operations) as [Operation, ...Operation[]]), args: z.unknown() }).strict().parse(body);
-      if (!['runtime_info','sessions','session_health','bridge_touch','bridge_close','events','request_get','request_list','request_messages','checkpoint_get','request_preview','request_preview_read','request_task_read','task_get','tasks','record','attachment_upload_read','attachment_read','request_attachments'].includes(input.operation)) store.activityTouch(actor);
+      if (!['runtime_info','sessions','session_health','bridge_touch','bridge_close','events','request_get','request_list','request_messages','checkpoint_get','request_preview','request_preview_read','request_task_read','task_get','tasks','record','attachment_upload_read','attachment_read','request_attachments','request_revisions','request_evidence_list','request_evidence_read','request_verification','request_bundle'].includes(input.operation)) store.activityTouch(actor);
       respond(res, 200, dispatch(store, actor, input.operation, input.args, instance));
     } catch (error) {
       const code = error instanceof DomainError ? error.code : error instanceof z.ZodError ? 'invalid_input' : 'internal_error';

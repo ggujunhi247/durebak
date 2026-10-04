@@ -59,4 +59,17 @@ test('HTTP and real MCP share request ACL, delivery, completion and recovery che
  await call('receive',{});const handles=await call('request_attachments',{id:attachmentRequest.id});
  assert.equal((await call('attachment_read',{id:handles.items[0].id})).content,'private attachment');
  await assert.rejects(http(c.token,'attachment_read',{id:handles.items[0].id}),/not_found/);
+ const reviewRequest=await http(a.token,'request_create',{to:b.session.id,body:'revision question',task:protectedInput.task,key:'revision-review'});await new Promise(resolve=>setTimeout(resolve,5100));await call('receive',{});await call('request_transition',{id:reviewRequest.id,version:1,state:'accepted',expectedTaskVersion:1});
+ const privateResult=await call('attachment_put',{name:'result',content:'private revision source',key:'revision-upload'});
+ const revision=await call('request_revision',{id:reviewRequest.id,version:2,expectedTaskVersion:2,uploadId:privateResult.id,key:'revision'});
+ assert.equal((await http(a.token,'request_bundle',{id:reviewRequest.id})).verification.status,'waiting_delivery');
+ await new Promise(resolve=>setTimeout(resolve,5100));await http(a.token,'receive');assert.equal((await http(a.token,'request_revisions',{id:reviewRequest.id})).items[0].id,revision.id);
+ const evidence=await http(a.token,'request_evidence',{id:reviewRequest.id,revisionId:revision.id,procedure:'npm test',result:'pass',attempt:'a1',key:'e1',startedAt:Date.now()-1000,endedAt:Date.now()});
+ assert.equal((await call('request_verification',{id:reviewRequest.id})).status,'reported_pass');assert.equal((await call('request_evidence_read',{id:evidence.id})).content,'npm test');
+ assert.equal((await call('request_evidence_list',{id:reviewRequest.id})).items[0].source,'self_reported');
+ await call('request_message',{id:reviewRequest.id,version:2,expectedTaskVersion:3,hash:revision.hash,body:'done',kind:'result',key:'revision-result'});
+ assert.equal((await http(a.token,'task_get',{id:reviewRequest.task.id})).result_hash,null);
+ await assert.rejects(http(c.token,'request_verification',{id:reviewRequest.id}),/not_found/);
+ assert((await call('runtime_info',{})).capabilities.includes('revision_verification_v1'));
+
 });

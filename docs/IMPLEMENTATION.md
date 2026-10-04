@@ -66,3 +66,11 @@ alpha.4 로컬 검증: 전체128개, 타입·57개 package allowlist·독립 설
 다음 단계 private 첨부 개발: owner-only immutable upload와 message-linked request handle을 분리 저장한다. 참여자 ACL/최초 전달 조건을 적용하며 legacy hash/cache로 private 원본을 읽지 못한다. 동일 공개본은 명시적으로 표시하고 preview 생성 뒤 범위 변화는 send-time conflict로 거부한다. schema7→8이 원본/handle 표와 preview attachment digest를 추가한다. 아직 alpha.4 지원 범위가 아니다.
 
 2026-10-04 private 첨부 개발 검증: 전체151개·타입·61파일package allowlist·독립설치smoke·저장소114파일·gitleaks 통과. 독립review의종료late-result첨부누락1건을cancelled/timed_out 회귀로재현해명시거부로수정했다. 구preview NULLdigest호환·원자rollback·quota/barrier/redaction·HTTP/MCP handle ACL을검증했다. 아직alpha4태그/릴리스와분리된개발코드다.
+
+## 다음 단계 개발: revision과 재검증 근거
+
+schema8→9에 불변 task revision·self_reported verification evidence와 완료 메시지 접근 경계를 추가한다. accepted recipient만 요청/작업 dual version으로 owner 전용 upload를 revision에 연결하고 정상 전달 note·비공개 handle·작업 version 증가를 한 transaction으로 처리한다. 최신 revision이 있는 완료 결과는 그 hash로 고정하며 결과 메시지가 전달되기 전 legacy task/record와 request summary에서 hash를 숨긴다. 기존 공개 artifact 결과는 revision 없는 보호 작업과 legacy task에서 유지한다.
+
+검증 보고는 정확한 revision/고정 기준 digest, 작성자, attempt와 연결한다. 같은 작성자의 동일 revision 이력만 supersede할 수 있다. 활성 실패는 통과보다 우선하고 충돌은 별도 표시한다. 이전 revision의 보고는 최신 결과 통과로 승격되지 않는다. procedure 원문은 bounded source API로 조회하며 참여자·revision 전달 ACL을 적용한다. 두레박이 실제 테스트 명령을 실행하는 runner는 포함하지 않는다.
+
+모델 호출 없는 bounded request_bundle은 원문 참조와 self_reported 출처를 제공하며 source_complete:false를 명시한다. Native Managed 자동 실행·실제 이종 Provider 검증·협업 UI는 별도 후속 단계다. 기존 alpha.4 release는 schema6이며 이 개발 내용을 포함하지 않는다.

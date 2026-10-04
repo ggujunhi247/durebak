@@ -3,14 +3,14 @@ import {randomUUID} from 'node:crypto';
 import {fail,hash,type Session,type Task} from './domain.js';
 import {range} from './content.js';
 import type {CollaborationRequest} from './requests.js';
-export type ProtectedTaskSummary=Pick<Task,'id'|'state'|'version'|'owner'|'result_hash'>&{result_visibility:'workspace-visible'|null};
+export type ProtectedTaskSummary=Pick<Task,'id'|'state'|'version'|'owner'|'result_hash'>&{result_visibility:'workspace-visible'|'request-private'|null};
 export class ProtectedTasks {
  constructor(private db:DatabaseSync){}
  private task(id:string){return this.db.prepare('SELECT t.* FROM request_tasks rt JOIN tasks t ON t.id=rt.task_id WHERE rt.request_id=?').get(id) as Task|undefined;}
  create(q:CollaborationRequest,input:{title:string;criteria:string},now:number){
   const id=randomUUID();
   this.db.prepare('INSERT INTO tasks(id,workspace,creator,title,criteria,created_at,key,digest) VALUES(?,?,?,?,?,?,?,?)').run(id,q.workspace,q.creator,input.title,input.criteria,new Date(now).toISOString(),`request:${q.id}:task`,hash(JSON.stringify(input)));
-  this.db.prepare('INSERT INTO request_tasks VALUES(?,?)').run(q.id,id);
+  this.db.prepare('INSERT INTO request_tasks(request_id,task_id) VALUES(?,?)').run(q.id,id);
  }
  authorize(actor:Session,taskId:string){
   const q=this.db.prepare('SELECT r.*,m.delivered_at FROM request_tasks rt JOIN requests r ON r.id=rt.request_id JOIN messages m ON m.id=r.message_id WHERE rt.task_id=?').get(taskId) as (CollaborationRequest&{delivered_at:number|null})|undefined;
@@ -23,7 +23,13 @@ export class ProtectedTasks {
  summary(actor:Session,q:CollaborationRequest):ProtectedTaskSummary|undefined {
   const task=this.task(q.id);if(!task)return;
   if(actor.id===q.recipient&&!this.db.prepare('SELECT id FROM messages WHERE id=? AND delivered_at IS NOT NULL').get(q.message_id))return;
-  return {id:task.id,state:task.state,version:task.version,owner:task.owner,result_hash:task.result_hash,result_visibility:task.result_hash?'workspace-visible':null};
+  const safe=this.redactResult(actor,task);
+  return {id:task.id,state:task.state,version:task.version,owner:task.owner,result_hash:safe.result_hash,result_visibility:safe.result_hash?(this.latest(q.id)?'request-private':'workspace-visible'):null};
+ }
+ latest(id:string){return this.db.prepare('SELECT * FROM task_revisions WHERE request_id=? ORDER BY cursor DESC LIMIT 1').get(id) as {id:string;hash:string;upload_id:string}|undefined;}
+ redactResult(actor:Session,task:Task):Task {
+  const row=this.db.prepare('SELECT rt.result_revision_id,m.sender,m.delivered_at FROM request_tasks rt LEFT JOIN messages m ON m.id=rt.result_message_id WHERE rt.task_id=?').get(task.id) as {result_revision_id:string|null;sender:string|null;delivered_at:number|null}|undefined;
+  return row?.result_revision_id&&row.sender!==actor.id&&row.delivered_at===null?{...task,result_hash:null}:task;
  }
  read(actor:Session,q:CollaborationRequest,offset:number,limit:number){
   const task=this.task(q.id);if(!task)fail('not_found');this.authorize(actor,task.id);
@@ -40,7 +46,9 @@ export class ProtectedTasks {
   }else if(state==='completed'){
    if(task.state!=='claimed'||task.owner!==q.recipient)fail('task_conflict');
    if(!resultHash)fail('result_hash_required');
-   if(!this.db.prepare('SELECT hash FROM artifacts WHERE workspace=? AND hash=?').get(q.workspace,resultHash))fail('artifact_not_found');
+   const latest=this.latest(q.id);
+   if(latest){if(latest.hash!==resultHash)fail('revision_conflict');this.db.prepare('UPDATE request_tasks SET result_revision_id=? WHERE request_id=?').run(latest.id,q.id);}
+   else if(!this.db.prepare('SELECT hash FROM artifacts WHERE workspace=? AND hash=?').get(q.workspace,resultHash))fail('artifact_not_found');
    this.db.prepare("UPDATE tasks SET state='completed',result_hash=?,version=version+1 WHERE id=?").run(resultHash,task.id);
   }else this.db.prepare("UPDATE tasks SET state='cancelled',version=version+1 WHERE id=?").run(task.id);
  }
