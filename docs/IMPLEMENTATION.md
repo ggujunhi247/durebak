@@ -144,3 +144,11 @@ Trusted mock의 awaiting_peer receipt가 exact child origin을 가리키는 경�
 이 단계는 내부 mock controller 검증이며 공개 실행 operation, 실제 Provider model turn, 자동 wake scheduler, 기존 활성 native session resume를 추가하지 않는다. Cooperative Claude/Codex/OpenCode CLI·HTTP·MCP 및 공통 skill/command는 이전 범위를 유지한다. Schema1–12 migration은 유지하고 schema13을 추가한다. 기존 schema12 예약의 policy digest는 peer 허용 범위를 포함한 현재 digest와 다르므로 제출을 거부하고 재검증해야 한다. 기존 unknown/submitting은 새 작업으로 재제출하지 않는다. Immutable alpha.6(schema10) 파일에 개발 범위를 소급하지 않는다.
 
 독립 리뷰에서 root peer 권한 철회·부모 일시정지 전 제출·중간 요청 취소 전파의 누락을 재현했다. 공유 provenance gate에서 직접 부모 및 root grant와 모든 요청 조상을 확인하도록 보강했고, 실패 재현4개와 continuation/reservation/driver55개를 다시 확인했다. Alpha.7은 schema13이며 실제 native wake/모델 협업 지원 주장은 추가하지 않는다.
+
+## 실제 Codex 연결의 내부 RPC transport (개발)
+
+CodexRpc는 newline JSON 메시지의 분할 UTF-8·여러 frame·동시 응답 ID를 처리하고 frame 크기·대기 요청 수·시간을 제한한다. Timeout/EOF/write 오류 뒤 자동 재송신하지 않는다. Host approval/tool request는 client response와 별도 namespace로 분리하고 기본 거부한다. Remote 오류는 숫자 code만 반환하며 원문 message/command/credential을 오류에 복사하지 않는다. 이 transport 자체는 native 실행 권한이나 durable attempt receipt 검증이 아니다.
+
+설치된 Codex0.146.0의 기본 generated schema와 `--experimental` schema를 구분한다. 실험적 `permissions`/`permissionProfile`과 `activePermissionProfile`을 확인한 별도 비모델 probe에서 fresh isolated profile·ephemeral thread 생성/조회, explicit named profile 원문 읽기 허용·외부 원문/프로필 canary/symlink 읽기 거부·쓰기 거부를 확인했다. Credential 복사·model turn·기존 session resume는0이다. 동일 RPC 코드를 실제 initialize→thread/start→identity read→scoped command/exec에 적용해 확인했다. 이는 macOS installed-version 비모델 증거이며 실제 모델의 협업·read scope 및 Linux native 검증은 별도다.
+
+[공식 permission profiles](https://learn.chatgpt.com/docs/permissions)와 [app-server 계약](https://learn.chatgpt.com/docs/app-server)은 beta 필드가 변경될 수 있음을 전제로 사용한다. Legacy readOnly 단독 정책은 실제 외부 canary 읽기를 허용했으므로 선택한 원문 범위를 증명하지 못한다. 현재 controller의 mock-only 권한과 auto_wake:false는 유지하며 canonical owned profile/machine-wide fence/actual turn·interrupt·재접속 및 scheduler 연결을 계속 구현한다. Immutable alpha.7 배포 파일에는 이후 개발 변경을 소급하지 않는다.
