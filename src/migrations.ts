@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { fail } from './domain.js';
 import { transaction } from './transactions.js';
 
-export const schemaVersion = 11;
+export const schemaVersion = 12;
 
 // Preserve released migration SQL and append new versions at the end.
 export function migrate(db: DatabaseSync) {
@@ -226,6 +226,20 @@ export function migrate(db: DatabaseSync) {
           CREATE INDEX work_attempt_binding ON work_attempts(binding_id,state);
           CREATE INDEX work_attempt_workspace ON work_attempts(workspace,state);
           PRAGMA user_version=11;
+        `);
+      }
+      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 12) {
+        db.exec(`
+          ALTER TABLE work_attempts ADD COLUMN driver_outcome TEXT;
+          ALTER TABLE work_attempts ADD COLUMN driver_receipt TEXT;
+          ALTER TABLE work_attempts ADD COLUMN driver_turn_id TEXT;
+          ALTER TABLE work_attempts ADD COLUMN input_accepted INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE work_attempts ADD COLUMN stop_requested INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE work_attempts ADD COLUMN stop_reason TEXT;
+          ALTER TABLE work_attempts ADD COLUMN outcome_observed_ms INTEGER;
+          ALTER TABLE work_attempts ADD COLUMN active_released INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE work_attempts ADD COLUMN budget_returned INTEGER NOT NULL DEFAULT 0;
+          PRAGMA user_version=12;
         `);
       }
     });

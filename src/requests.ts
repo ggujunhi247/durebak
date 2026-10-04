@@ -20,6 +20,18 @@ export type RequestState='pending'|'accepted'|'completed'|'rejected'|'failed'|'c
 export interface CollaborationRequest {id:string;workspace:string;creator:string;recipient:string;message_id:string;state:RequestState;version:number;created_ms:number;deadline_at:number;reason_code:string|null;detail:string|null;task?:ProtectedTaskSummary}
 interface StoredRequest extends CollaborationRequest {key:string;digest:string}
 const terminal=(state:RequestState)=>!['pending','accepted'].includes(state);
+// Shared non-model deadline maintenance; the caller owns the transaction.
+export function expireRequestsWithinTransaction(db:DatabaseSync,now:number){
+ if(!db.isTransaction)fail('transaction_required');
+ const tasks=new ProtectedTasks(db),rows=db.prepare("SELECT * FROM requests WHERE state IN ('pending','accepted') AND deadline_at<=?").all(now) as unknown as StoredRequest[];
+ for(const q of rows){
+  db.prepare("UPDATE requests SET state='timed_out',version=version+1 WHERE id=?").run(q.id);
+  tasks.timeout(q.id);
+  for(const recipient of [q.creator,q.recipient])db.prepare('INSERT OR IGNORE INTO request_controls(request_id,recipient,reason,created_ms) VALUES(?,?,?,?)').run(q.id,recipient,'timed_out',now);
+  db.prepare("UPDATE messages SET status='expired',lease_until=NULL WHERE status='queued' AND id IN (SELECT message_id FROM request_messages WHERE request_id=?)").run(q.id);
+ }
+ db.prepare("UPDATE messages SET status='expired',lease_until=NULL WHERE (status='queued' OR (status='in_flight' AND lease_until<=?)) AND id IN (SELECT rm.message_id FROM request_messages rm JOIN requests r ON r.id=rm.request_id WHERE r.state IN ('cancelled','timed_out','rejected','failed'))").run(now);
+}
 export class RequestRepository {
  constructor(private db:DatabaseSync,private clock:{now():number},private enqueue:(actor:Session,input:z.input<typeof sendSchema>,now:number)=>Message,private validatePreview:(actor:Session,id:string,payload:z.output<typeof requestPayloadSchema>,now:number)=>void,private tasks:ProtectedTasks,private attachments:ScopedAttachments){}
  private one<T>(sql:string,...args:SQLInputValue[]){return this.db.prepare(sql).get(...args) as T|undefined;}
@@ -35,15 +47,7 @@ export class RequestRepository {
  }
  // Only call this method inside the caller's transaction. No nested transaction.
  expireWithinTransaction(now=this.clock.now()){
-  const rows=this.all<StoredRequest>("SELECT * FROM requests WHERE state IN ('pending','accepted') AND deadline_at<=?",now);
-  for(const q of rows){
-   this.run("UPDATE requests SET state='timed_out',version=version+1 WHERE id=?",q.id);
-   this.tasks.timeout(q.id);
-   this.notice(q,'timed_out',now);
-   this.run("UPDATE messages SET status='expired',lease_until=NULL WHERE status='queued' AND id IN (SELECT message_id FROM request_messages WHERE request_id=?)",q.id);
-  }
-  // Preserve an active delivery receipt for ack, but never requeue a closed request.
-  this.run("UPDATE messages SET status='expired',lease_until=NULL WHERE (status='queued' OR (status='in_flight' AND lease_until<=?)) AND id IN (SELECT rm.message_id FROM request_messages rm JOIN requests r ON r.id=rm.request_id WHERE r.state IN ('cancelled','timed_out','rejected','failed'))",now);
+  expireRequestsWithinTransaction(this.db,now);
  }
  expire(now=this.clock.now()){transaction(this.db,()=>this.expireWithinTransaction(now));}
  messageMetadata(id:string){return this.one<{request_id:string;kind:string}>('SELECT request_id,kind FROM request_messages WHERE message_id=?',id);}
