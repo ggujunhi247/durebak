@@ -39,7 +39,7 @@ export function sessionCall(file: string, operation: Operation, args: unknown) {
   const config = credential(file);
   return request(config.data_dir, config.token, '/v1/session', { operation, args });
 }
-export function adminCall(directory: string, path: '/v1/register' | '/v1/revoke', args: unknown) {
+export function adminCall(directory: string, path: '/v1/register' | '/v1/revoke' | '/v1/managed', args: unknown) {
   const admin = z.object({ token:z.string() }).parse(privateJson(join(directory, 'admin.json')));
   return request(directory, admin.token, path, args);
 }

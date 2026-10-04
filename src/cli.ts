@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {managedBindSchema} from './managed-control.js';
 import { resolveHarness, legacyProvider } from './harnesses/registry.js';
 import { harnessCatalog } from './harnesses/catalog.js';
 import { version } from './version.js';
@@ -25,6 +26,8 @@ const help = `Durebak ${version} — local cooperative session bus
   durebak mcp --session FILE                      Start session-scoped MCP stdio bridge
   durebak call OPERATION --session FILE [--json JSON | --input FILE]
   durebak setup --harness codex|claude-code|opencode --session FILE --out FILE
+  durebak managed-bind SESSION_ID --harness codex --native-id ID --profile PROFILE --instance ID --key KEY --out FILE [--data-dir PATH]
+  durebak managed-policy --json JSON [--data-dir PATH]  Administrator-only policy configuration (no host execution)
   durebak dashboard --session FILE              Show one read-only cooperation snapshot
   durebak doctor --session FILE                 Check identity and runtime compatibility
   durebak export TASK_ID --session FILE [--out FILE]
@@ -42,7 +45,7 @@ function required(value: string | undefined, name: string) { if (!value) fail(`m
 
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals:true, options:{
-    'data-dir':{type:'string'}, workspace:{type:'string'}, alias:{type:'string'}, provider:{type:'string'}, harness:{type:'string'}, out:{type:'string'}, session:{type:'string'}, json:{type:'string'}, input:{type:'string'}, host:{type:'string'}, help:{type:'boolean'}, version:{type:'boolean'},
+    'native-id':{type:'string'},profile:{type:'string'},instance:{type:'string'},key:{type:'string'},'data-dir':{type:'string'}, workspace:{type:'string'}, alias:{type:'string'}, provider:{type:'string'}, harness:{type:'string'}, out:{type:'string'}, session:{type:'string'}, json:{type:'string'}, input:{type:'string'}, host:{type:'string'}, help:{type:'boolean'}, version:{type:'boolean'},
   } });
   const command = positionals[0];
   if (values.version) { process.stdout.write(version+'\n'); return; }
@@ -75,6 +78,18 @@ async function main() {
       output({ session:result.session, credential_file:file });
     } finally { closeSync(fd); if (!registered) unlinkSync(file); }
     return;
+  }
+  if(command==='managed-bind'){
+    const directory=selectedDirectory(),input=managedBindSchema.parse({sessionId:required(positionals[1],'session_id'),harness:required(values.harness,'harness'),nativeId:required(values['native-id'],'native_id'),profile:required(values.profile,'profile'),instance:required(values.instance,'instance'),key:required(values.key,'key')});
+    const destination=resolve(required(values.out,'out')),fd=openSync(destination,'wx',0o600);let written=false;
+    try{const result=z.object({binding:z.object({id:z.string(),epoch:z.number()}),ownerToken:z.string().nullable()}).parse(await adminCall(directory,'/v1/managed',{operation:'bind',args:input}));
+      if(!result.ownerToken)fail('owner_credential_unavailable');writeFileSync(fd,JSON.stringify({data_dir:directory,binding_id:result.binding.id,epoch:result.binding.epoch,owner_token:result.ownerToken})+'\n');written=true;
+      output({binding_id:result.binding.id,owner_credential_file:destination,auto_wake:false,host_readiness:'unverified'});
+    }finally{closeSync(fd);if(!written)unlinkSync(destination);}return;
+  }
+  if(command==='managed-policy'){
+    const text=required(values.json,'json');if(Buffer.byteLength(text)>131072)fail('request_too_large');let input:unknown;try{input=JSON.parse(text);}catch{fail('invalid_json');}
+    output({policy:await adminCall(selectedDirectory(),'/v1/managed',{operation:'policy',args:input}),auto_wake:false,host_readiness:'unverified'});return;
   }
   if (command === 'revoke') { output(await adminCall(selectedDirectory(),'/v1/revoke',{ id:required(positionals[1],'session_id') })); return; }
   if (!['dashboard','setup','doctor','mcp','call','export'].includes(command)) fail('unknown_command');

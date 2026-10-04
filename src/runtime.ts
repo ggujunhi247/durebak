@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { Store } from './store.js';
 import { DomainError, fail, sendSchema, taskSchema, type Session } from './domain.js';
 import { privateDirectory } from './database.js';
+import {managedBindSchema,managedPolicySchema,managedRenewSchema} from './managed-control.js';
 import {revisionSchema,evidenceSchema} from './verification.js';
 import {attachmentPutSchema} from './scoped-attachments.js';
 import {requestPayloadSchema,requestCreateSchema,requestMessageSchema,requestTransitionSchema,checkpointSchema} from './requests.js';
@@ -44,6 +45,7 @@ export const operations = {
   checkpoint_get:z.object({consumer:identifier}).strict(),
   checkpoint_set:checkpointSchema,
   collaboration_status:z.object({sessionAfter:z.string().max(200).default(''),requestAfter:z.string().max(200).default('')}).strict(),
+  managed_status:empty,
   runtime_info: empty,
   bridge_touch: z.object({instance:z.string().uuid(),epoch:z.string().regex(/^[a-f0-9]{32}$/)}).strict(),
   bridge_close: z.object({instance:z.string().uuid(),epoch:z.string().regex(/^[a-f0-9]{32}$/)}).strict(),
@@ -99,6 +101,7 @@ function dispatch(store: Store, actor: Session, operation: Operation, input: unk
     case 'checkpoint_get':return store.checkpointGet(actor,operations.checkpoint_get.parse(input).consumer);
     case 'checkpoint_set':return store.checkpointSet(actor,checkpointSchema.parse(input));
     case 'collaboration_status':return store.collaborationStatus(actor,epoch,operations.collaboration_status.parse(input));
+    case 'managed_status':empty.parse(input);return store.managedStatus(actor);
     case 'runtime_info': empty.parse(input); return { version, protocol_version: protocolVersion, schema_version: schemaVersion, session_id: actor.id, daemon_epoch: epoch, capabilities:['session_health_v1','request_threads_v1','request_controls_v1','consumer_checkpoints_v1','request_preview_v1','protected_request_tasks_v1','private_attachments_v1','revision_verification_v1','collaboration_status_v1'] };
     case 'session_health': {const a=operations.session_health.parse(input);return store.sessionHealth(actor,a.id??actor.id,epoch);}
     case 'bridge_touch': {const a=operations.bridge_touch.parse(input);if(a.epoch!==epoch)fail('daemon_epoch_mismatch');return store.bridgeTouch(actor,a.instance,epoch);}
@@ -157,15 +160,20 @@ export async function startRuntime(directory: string) {
   const server = createServer(async (req, res) => {
     try {
       if (req.headers.origin || req.headers.host !== new URL(url).host) { respond(res, 403, { error: 'origin_or_host_rejected' }); return; }
-      if (req.method !== 'POST' || !['/v1/register', '/v1/revoke', '/v1/session'].includes(req.url ?? '')) { respond(res, 404, { error: 'not_found' }); return; }
+      if (req.method !== 'POST' || !['/v1/register', '/v1/revoke', '/v1/managed', '/v1/session'].includes(req.url ?? '')) { respond(res, 404, { error: 'not_found' }); return; }
       // Reject declared oversized input before parsing/authentication.
       if (Number(req.headers['content-length'] ?? 0) > 131072) { respond(res, 413, { error: 'request_too_large' }); return; }
       if (req.headers['content-type'] !== 'application/json') { respond(res, 415, { error: 'json_required' }); return; }
       const token = req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1] ?? '';
-      if (req.url === '/v1/register' || req.url === '/v1/revoke') {
+      if (req.url === '/v1/register' || req.url === '/v1/revoke' || req.url === '/v1/managed') {
         if (!equal(token, adminToken)) { respond(res, 401, { error: 'unauthorized' }); return; }
         const input = await readBody(req);
-        if (req.url === '/v1/register') {
+        if(req.url==='/v1/managed'){
+          const args=z.object({operation:z.enum(['bind','policy','renew']),args:z.unknown()}).strict().parse(input);
+          if(args.operation==='bind')respond(res,200,store.managedBind(managedBindSchema.parse(args.args)));
+          else if(args.operation==='policy')respond(res,200,store.managedPolicy(managedPolicySchema.parse(args.args)));
+          else {const a=managedRenewSchema.parse(args.args);respond(res,200,store.managedRenew(a.bindingId,a.epoch,a.ownerToken));}
+        } else if (req.url === '/v1/register') {
           const args = z.object({ workspace: identifier, alias: identifier, provider:z.string().optional(), harness:z.string().optional() }).strict().parse(input);
           respond(res, 200, store.register(args.workspace, args.alias, legacyProvider(resolveHarness(args.harness,args.provider))));
         } else { const args = z.object({ id: identifier }).strict().parse(input); store.revoke(args.id); respond(res, 200, { revoked: args.id }); }
@@ -178,7 +186,7 @@ export async function startRuntime(directory: string) {
       const actor = store.authenticate(token);
       if (!actor) { respond(res, 401, { error: 'unauthorized' }); return; }
       const input = z.object({ operation: z.enum(Object.keys(operations) as [Operation, ...Operation[]]), args: z.unknown() }).strict().parse(body);
-      if (!['collaboration_status','runtime_info','sessions','session_health','bridge_touch','bridge_close','events','request_get','request_list','request_messages','checkpoint_get','request_preview','request_preview_read','request_task_read','task_get','tasks','record','attachment_upload_read','attachment_read','request_attachments','request_revisions','request_evidence_list','request_evidence_read','request_verification','request_bundle'].includes(input.operation)) store.activityTouch(actor);
+      if (!['managed_status','collaboration_status','runtime_info','sessions','session_health','bridge_touch','bridge_close','events','request_get','request_list','request_messages','checkpoint_get','request_preview','request_preview_read','request_task_read','task_get','tasks','record','attachment_upload_read','attachment_read','request_attachments','request_revisions','request_evidence_list','request_evidence_read','request_verification','request_bundle'].includes(input.operation)) store.activityTouch(actor);
       respond(res, 200, dispatch(store, actor, input.operation, input.args, instance));
     } catch (error) {
       const code = error instanceof DomainError ? error.code : error instanceof z.ZodError ? 'invalid_input' : 'internal_error';

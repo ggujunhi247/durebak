@@ -1,14 +1,5 @@
-import type { DatabaseSync } from 'node:sqlite';
-import { fail } from './domain.js';
-import { transaction } from './transactions.js';
+-- Snapshot of schema 9 SQL from immutable v0.1.0-alpha.5; independent of current migrations.
 
-export const schemaVersion = 10;
-
-// Preserve released migration SQL and append new versions at the end.
-export function migrate(db: DatabaseSync) {
-    const version = (db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version;
-    if (version > schemaVersion) { fail('unsupported_database_version'); }
-    db.exec(`
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY, workspace TEXT NOT NULL, alias TEXT NOT NULL, provider TEXT NOT NULL,
         token_hash TEXT NOT NULL UNIQUE, revoked INTEGER NOT NULL DEFAULT 0, UNIQUE(workspace, alias)
@@ -39,10 +30,8 @@ export function migrate(db: DatabaseSync) {
         touched INTEGER NOT NULL, PRIMARY KEY(workspace,key)
       ) STRICT;
 
-    `);
-    transaction(db, () => {
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 2) {
-        db.exec(`
+    
+
           ALTER TABLE sessions ADD COLUMN availability TEXT NOT NULL DEFAULT 'available';
           ALTER TABLE messages ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal';
           ALTER TABLE messages ADD COLUMN urgent_reason TEXT;
@@ -60,10 +49,8 @@ export function migrate(db: DatabaseSync) {
           CREATE INDEX queue_idx ON messages(recipient,status,due_at);
           CREATE INDEX urgent_idx ON messages(sender,priority,created_ms);
           PRAGMA user_version=2;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 3) {
-        db.exec(`
+        
+
           CREATE TABLE delivery_audit (
             cursor INTEGER PRIMARY KEY AUTOINCREMENT,
             message_id TEXT NOT NULL UNIQUE REFERENCES messages(id),
@@ -73,10 +60,8 @@ export function migrate(db: DatabaseSync) {
           INSERT INTO delivery_audit(message_id,recipient)
             SELECT id,recipient FROM messages WHERE delivered_at IS NOT NULL ORDER BY delivered_at,seq;
           PRAGMA user_version=3;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 4) {
-        db.exec(`
+        
+
           CREATE TABLE session_activity (
             session_id TEXT PRIMARY KEY REFERENCES sessions(id), last_activity_ms INTEGER NOT NULL
           ) STRICT;
@@ -86,10 +71,8 @@ export function migrate(db: DatabaseSync) {
             PRIMARY KEY(session_id,instance)
           ) STRICT;
           PRAGMA user_version=4;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 5) {
-        db.exec(`
+        
+
           CREATE TABLE requests (
             id TEXT PRIMARY KEY, workspace TEXT NOT NULL, creator TEXT NOT NULL REFERENCES sessions(id),
             recipient TEXT NOT NULL REFERENCES sessions(id), message_id TEXT NOT NULL REFERENCES messages(id),
@@ -120,28 +103,22 @@ export function migrate(db: DatabaseSync) {
             PRIMARY KEY(session_id,consumer)
           ) STRICT;
           PRAGMA user_version=5;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 6) {
-        db.exec(`
+        
+
           CREATE TABLE request_previews (
             id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES sessions(id), payload TEXT NOT NULL,
             digest TEXT NOT NULL, created_ms INTEGER NOT NULL, expires_at INTEGER NOT NULL
           ) STRICT;
           CREATE INDEX preview_owner ON request_previews(owner,expires_at);
           PRAGMA user_version=6;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 7) {
-        db.exec(`
+        
+
           CREATE TABLE request_tasks (
             request_id TEXT PRIMARY KEY REFERENCES requests(id), task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id)
           ) STRICT;
           PRAGMA user_version=7;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 8) {
-        db.exec(`
+        
+
           CREATE TABLE private_uploads (
             id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES sessions(id), workspace TEXT NOT NULL,
             name TEXT NOT NULL, hash TEXT NOT NULL, content TEXT NOT NULL, bytes INTEGER NOT NULL,
@@ -155,10 +132,8 @@ export function migrate(db: DatabaseSync) {
           CREATE INDEX scoped_attachment_request ON request_attachment_handles(request_id,cursor);
           ALTER TABLE request_previews ADD COLUMN attachment_digest TEXT;
           PRAGMA user_version=8;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 9) {
-        db.exec(`
+        
+
           CREATE TABLE task_revisions (
             cursor INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
             request_id TEXT NOT NULL REFERENCES requests(id), task_id TEXT NOT NULL REFERENCES tasks(id),
@@ -178,30 +153,4 @@ export function migrate(db: DatabaseSync) {
           ALTER TABLE request_tasks ADD COLUMN result_revision_id TEXT REFERENCES task_revisions(id);
           ALTER TABLE request_tasks ADD COLUMN result_message_id TEXT REFERENCES messages(id);
           PRAGMA user_version=9;
-        `);
-      }
-      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 10) {
-        db.exec(`
-          CREATE TABLE native_bindings (
-            id TEXT PRIMARY KEY, session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id), workspace TEXT NOT NULL,
-            harness TEXT NOT NULL, profile TEXT NOT NULL, native_id TEXT NOT NULL, instance TEXT NOT NULL,
-            owner_hash TEXT NOT NULL, epoch INTEGER NOT NULL DEFAULT 1, lease_until INTEGER NOT NULL,
-            execution_state TEXT NOT NULL DEFAULT 'unverified', created_ms INTEGER NOT NULL, last_owner_contact_ms INTEGER NOT NULL, last_observed_ms INTEGER NOT NULL,
-            key TEXT NOT NULL UNIQUE, digest TEXT NOT NULL, UNIQUE(harness,profile,native_id)
-          ) STRICT;
-          CREATE TABLE managed_policies (
-            binding_id TEXT PRIMARY KEY REFERENCES native_bindings(id), version INTEGER NOT NULL DEFAULT 1,
-            enabled INTEGER NOT NULL DEFAULT 0, scope_id TEXT NOT NULL UNIQUE,
-            max_turns INTEGER NOT NULL DEFAULT 30, max_concurrent INTEGER NOT NULL DEFAULT 3,
-            expires_at INTEGER, grant_ttl_ms INTEGER NOT NULL DEFAULT 3600000, expired INTEGER NOT NULL DEFAULT 0,
-            spent_turns INTEGER NOT NULL DEFAULT 0, active_turns INTEGER NOT NULL DEFAULT 0
-          ) STRICT;
-          CREATE TABLE managed_policy_updates (
-            binding_id TEXT NOT NULL REFERENCES native_bindings(id), key TEXT NOT NULL,
-            digest TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(binding_id,key)
-          ) STRICT;
-          PRAGMA user_version=10;
-        `);
-      }
-    });
-}
+        

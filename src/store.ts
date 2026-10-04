@@ -7,6 +7,7 @@ import { openDatabase } from './database.js';
 import { transaction } from './transactions.js';
 import { encodedPreview, preview, range } from './content.js';
 import {ScopedAttachments,attachmentPutSchema} from './scoped-attachments.js';
+import {ManagedControl,managedBindSchema,managedPolicySchema} from './managed-control.js';
 import type {CollaborationStatus} from './collaboration-status.js';
 import {Verification,revisionSchema,evidenceSchema} from './verification.js';
 import {ProtectedTasks} from './protected-tasks.js';
@@ -26,10 +27,12 @@ export class Store {
   private readonly requests: RequestRepository;
   private readonly attachments:ScopedAttachments;
   private readonly protectedTasks:ProtectedTasks;
+  private readonly managed:ManagedControl;
   private readonly verification:Verification;
   private readonly previews: RequestPreviewRepository;
   constructor(readonly directory: string, private readonly clock = { now: () => Date.now() }) {
     this.db = openDatabase(directory);
+    this.managed=new ManagedControl(this.db,this.clock);
     this.attachments=new ScopedAttachments(this.db);
     this.protectedTasks=new ProtectedTasks(this.db);
     this.previews=new RequestPreviewRepository(this.db,this.clock,this.attachments);
@@ -92,6 +95,10 @@ export class Store {
     const activity=this.one<{last_activity_ms:number}>('SELECT last_activity_ms FROM session_activity WHERE session_id=?',id);
     return {session_id:id,bridge:bridgeHealth(rows.map(x=>({...x,closed:!!x.closed})),epoch,now),last_activity_at:activity?.last_activity_ms??null,availability:session.availability,host:'unknown',readiness:'unknown',progress:'unknown',auto_wake:false};
   }
+  managedBind(input:z.input<typeof managedBindSchema>){return this.managed.bind(input);}
+  managedPolicy(input:z.input<typeof managedPolicySchema>){return this.managed.setPolicy(input);}
+  managedRenew(bindingId:string,epoch:number,ownerToken:string){return this.managed.renew(bindingId,epoch,ownerToken);}
+  managedStatus(actor:Session){return this.managed.status(actor);}
   collaborationStatus(actor:Session,epoch:string,input:{sessionAfter?:string;requestAfter?:string}={}):CollaborationStatus {
     const data=z.object({sessionAfter:z.string().max(200).default(''),requestAfter:z.string().max(200).default('')}).strict().parse(input);
     return this.transaction(()=>{
