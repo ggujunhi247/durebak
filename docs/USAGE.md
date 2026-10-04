@@ -258,3 +258,13 @@ setup 출력의 scope=config_fragment는 설정 파일 조각의 생성 범위�
 현재 보호 작업 결과에는 기존 `artifact_put`으로 저장한 `hash`가 필요합니다. 이 산출물은 **workspace-visible**이며 작업의 private 범위로 바뀌지 않습니다. request task summary의 `result_visibility`에 그 범위를 표시합니다. request-private 첨부·revision·재검증 evidence는 후속 기능입니다. 완료는 결과 제출이고 실제 검증 통과가 아닙니다.
 
 공유 preview는 작업 제목·기준 digest까지 포함합니다. preview owner가 `request_preview_read`에 `part: "criteria"`를 넣으면 기준 원문을 확인할 수 있고, 기준이 바뀐 전송은 `preview_conflict`입니다. 이 개발 내용은 이미 배포한 alpha.4에 소급 적용되지 않습니다.
+
+### 요청 전용 텍스트 첨부 (개발 중)
+
+`attachment_put {name,content,key}`는 명시적 텍스트(64 KiB 이하)를 소유자 전용 불변 upload로 저장합니다. `attachment_upload_read {id,offset,limit}`는 소유자만 원문을 읽습니다. `request_create` 또는 `request_message`에 선택적 `uploads: [UPLOAD_ID]`(최대10개)를 넣으면 메시지와 원자적으로 request-private handle을 만듭니다. `request_attachments`의 id는 request ID이고, `attachment_read`의 id는 반환된 handle ID입니다. 수신자는 해당 메시지가 실제 전달된 뒤에만 handle과 본문을 볼 수 있습니다. 원래 upload ID 접근은 부여하지 않습니다.
+
+legacy `artifact_read(hash)`와 workspace cache로 private 원본을 읽을 수 없습니다. 다만 같은 내용의 공개 artifact가 이미 있다면 미리보기와 handle metadata의 `public_copy_exists`가 true입니다. 공개본을 삭제하거나 내용 자체가 비밀이라고 표시하지 않습니다. preview는 첨부 ID·내용·이름·범위까지 묶어 검사하고, 새 공개본이 생기는 등 공유 범위가 바뀌면 새 preview가 필요합니다.
+
+미공유 upload는 소유자당20개, 요청 첨부는100개/총1MiB입니다. 공유된 원본은 감사 기록으로 보존하며 미공유 quota에서 제외합니다. 오래된 원본 보존 기간 정리는 후속 기능입니다. 전체 디렉터리나 native 대화를 자동 수집하지 않습니다. 이 개발 내용은 배포된 alpha.4에 포함되지 않습니다.
+
+취소·기한 만료된 요청의 늦은 결과는 첨부 없는 본문만 감사 기록으로 받을 수 있습니다. 비어 있지 않은 `uploads`는 `terminal_attachment_forbidden`으로 거부하며 조용히 첨부를 생략하지 않습니다.

@@ -62,3 +62,7 @@ alpha.4 로컬 검증: 전체128개, 타입·57개 package allowlist·독립 설
 선택적인 새 task를 request와 원자적으로 생성하고 참여자 ACL·최초 전달 조건을 legacy task 목록/조회/record/events에도 적용한다. legacy mutation은 연결 요청 연산을 요구하며, request/task version을 함께 검사해 수락·결과·종료를 한 transaction에서 반영한다. 결과 hash는 현재 기존 workspace-visible artifact이며 request-private 첨부/revision은 후속이다. schema6→7은 mapping 표를 추가한다. 기존 alpha.4에는 포함되지 않은 개발 내용이다.
 
 2026-10-04 보호 작업 개발 검증: 전체139개·타입·59파일 패키지 allowlist·저장소112파일·gitleaks 통과. 독립 리뷰의 Critical/Important 문제 없음, 집중37개 통과. 실제HTTP/MCP 기준 조회/legacy mutation 차단/양쪽version 수락·완료, storage failure 원자성, 독립released schema6 fixture의 원래 request/preview/credential 보존을 확인했다. 아직 alpha.4 출시 파일에 포함되지 않는다.
+
+다음 단계 private 첨부 개발: owner-only immutable upload와 message-linked request handle을 분리 저장한다. 참여자 ACL/최초 전달 조건을 적용하며 legacy hash/cache로 private 원본을 읽지 못한다. 동일 공개본은 명시적으로 표시하고 preview 생성 뒤 범위 변화는 send-time conflict로 거부한다. schema7→8이 원본/handle 표와 preview attachment digest를 추가한다. 아직 alpha.4 지원 범위가 아니다.
+
+2026-10-04 private 첨부 개발 검증: 전체151개·타입·61파일package allowlist·독립설치smoke·저장소114파일·gitleaks 통과. 독립review의종료late-result첨부누락1건을cancelled/timed_out 회귀로재현해명시거부로수정했다. 구preview NULLdigest호환·원자rollback·quota/barrier/redaction·HTTP/MCP handle ACL을검증했다. 아직alpha4태그/릴리스와분리된개발코드다.

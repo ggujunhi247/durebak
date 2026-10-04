@@ -50,4 +50,13 @@ test('HTTP and real MCP share request ACL, delivery, completion and recovery che
  const artifact=await call('artifact_put',{content:'workspace-visible result'});
  await call('request_message',{id:protectedRequest.id,version:2,kind:'result',body:'protected result',key:'protected-result',expectedTaskVersion:2,hash:artifact.hash});
  assert.equal((await http(a.token,'request_get',{id:protectedRequest.id})).task.state,'completed');
+ const upload=await http(a.token,'attachment_put',{name:'private.txt',content:'private attachment',key:'upload'});
+ const attachmentInput={to:b.session.id,body:'attachment question',key:'attachment',priority:'urgent',urgentReason:'test attached delivery',uploads:[upload.id]};
+ const attachmentPreview=await http(a.token,'request_preview',{request:attachmentInput});assert.equal(attachmentPreview.attachments[0].visibility,'request-private');
+ const attachmentRequest=await http(a.token,'request_create',{...attachmentInput,previewId:attachmentPreview.id});
+ assert.equal((await call('request_attachments',{id:attachmentRequest.id})).items.length,0);
+ await assert.rejects(http(c.token,'artifact_read',{id:upload.hash}),/not_found/);
+ await call('receive',{});const handles=await call('request_attachments',{id:attachmentRequest.id});
+ assert.equal((await call('attachment_read',{id:handles.items[0].id})).content,'private attachment');
+ await assert.rejects(http(c.token,'attachment_read',{id:handles.items[0].id}),/not_found/);
 });
