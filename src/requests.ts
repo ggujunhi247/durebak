@@ -51,10 +51,12 @@ export class RequestRepository {
  }
  expire(now=this.clock.now()){transaction(this.db,()=>this.expireWithinTransaction(now));}
  messageMetadata(id:string){return this.one<{request_id:string;kind:string}>('SELECT request_id,kind FROM request_messages WHERE message_id=?',id);}
- create(actor:Session,input:z.input<typeof requestCreateSchema>){
+ create(actor:Session,input:z.input<typeof requestCreateSchema>){this.expire();return transaction(this.db,()=>this.createWithinTransaction(actor,input));}
+ createWithinTransaction(actor:Session,input:z.input<typeof requestCreateSchema>){
   if(Buffer.byteLength(JSON.stringify(actor.workspace))>4096)fail('request_scope_too_large');
-  const {previewId,...data}=requestCreateSchema.parse(input);const digest=hash(JSON.stringify(data));this.expire();
-  return transaction(this.db,()=>{
+  const {previewId,...data}=requestCreateSchema.parse(input);const digest=hash(JSON.stringify(data));
+  if(!this.db.isTransaction)fail('transaction_required');
+  this.expireWithinTransaction();
    const old=this.one<StoredRequest>('SELECT * FROM requests WHERE creator=? AND key=?',actor.id,data.key);
    if(old){if(old.digest!==digest)fail('idempotency_conflict');return this.snapshot(old,actor);}
    if(data.to===actor.id)fail('distinct_participants_required');
@@ -69,7 +71,6 @@ export class RequestRepository {
    this.attachments.link(actor,this.visible(actor,id),message.id,data.uploads);
    if(data.task)this.tasks.create(this.visible(actor,id),data.task,now);
    return this.snapshot(this.visible(actor,id),actor);
-  });
  }
  attachmentList(actor:Session,id:string,after=0,limit=10){this.get(actor,id);return this.attachments.list(actor,this.visible(actor,id),after,limit);}
  taskRead(actor:Session,id:string,offset=0,limit=4096){this.get(actor,id);return this.tasks.read(actor,this.visible(actor,id),offset,limit);}

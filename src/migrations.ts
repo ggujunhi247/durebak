@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { fail } from './domain.js';
 import { transaction } from './transactions.js';
 
-export const schemaVersion = 12;
+export const schemaVersion = 13;
 
 // Preserve released migration SQL and append new versions at the end.
 export function migrate(db: DatabaseSync) {
@@ -240,6 +240,27 @@ export function migrate(db: DatabaseSync) {
           ALTER TABLE work_attempts ADD COLUMN active_released INTEGER NOT NULL DEFAULT 0;
           ALTER TABLE work_attempts ADD COLUMN budget_returned INTEGER NOT NULL DEFAULT 0;
           PRAGMA user_version=12;
+        `);
+      }
+      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 13) {
+        db.exec(`
+          ALTER TABLE managed_policies ADD COLUMN allowed_peers TEXT NOT NULL DEFAULT '[]';
+          ALTER TABLE work_scopes ADD COLUMN root_request_id TEXT REFERENCES work_scopes(request_id);
+          UPDATE work_scopes SET root_request_id=request_id;
+          ALTER TABLE work_attempts ADD COLUMN charged_bindings TEXT NOT NULL DEFAULT '[]';
+          UPDATE work_attempts SET charged_bindings=json_array(binding_id);
+          CREATE TABLE work_children (
+            request_id TEXT PRIMARY KEY REFERENCES requests(id), parent_attempt TEXT NOT NULL REFERENCES work_attempts(id),
+            root_request_id TEXT NOT NULL REFERENCES work_scopes(request_id), intent_digest TEXT NOT NULL
+          ) STRICT;
+          CREATE TABLE work_waiters (
+            request_id TEXT PRIMARY KEY REFERENCES requests(id), origin_attempt TEXT NOT NULL REFERENCES work_attempts(id),
+            binding_id TEXT NOT NULL REFERENCES native_bindings(id), epoch INTEGER NOT NULL, instance TEXT NOT NULL,
+            policy_digest TEXT NOT NULL, root_policy_digest TEXT NOT NULL, deadline_at INTEGER NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('waiting','claimed','expired','cancelled')),
+            claim_attempt TEXT UNIQUE REFERENCES work_attempts(id)
+          ) STRICT;
+          PRAGMA user_version=13;
         `);
       }
     });

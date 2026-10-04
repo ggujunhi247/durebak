@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { fail, hash, short, body, sendSchema, taskSchema, type Session, type Message, type QueuedMessage, type Task } from './domain.js';
 import { bridgeHealth, type BridgeObservation, type SessionHealth } from './health.js';
 import { openDatabase } from './database.js';
+import {messageQueue} from './message-queue.js';
 import { transaction } from './transactions.js';
 import { encodedPreview, preview, range } from './content.js';
 import {ScopedAttachments,attachmentPutSchema} from './scoped-attachments.js';
@@ -134,29 +135,7 @@ export class Store {
   checkpointGet(actor:Session,consumer:string){return this.requests.checkpointGet(actor,consumer);}
   checkpointSet(actor:Session,input:z.input<typeof checkpointSchema>){return this.requests.checkpointSet(actor,input);}
   expireRequests(){this.requests.expire();}
-  private enqueue(actor: Session, input: z.input<typeof sendSchema>, decisionTime=this.clock.now()): Message {
-    const data = sendSchema.parse(input);
-    if (data.priority === 'urgent' && !data.urgentReason) fail('urgent_reason_required');
-    const digest = hash(JSON.stringify([data.to, data.body, data.replyTo ?? null, data.priority, data.urgentReason ?? null, data.delayMs, data.ttlMs]));
-    const old = this.one<QueuedMessage>('SELECT * FROM messages WHERE sender=? AND key=?', actor.id, data.key);
-    if (old) {
-      const legacyMatch = old.legacy && data.priority==='normal' && !data.urgentReason && data.delayMs===0 && data.ttlMs===86400000 && old.digest===hash(JSON.stringify([data.to,data.body,data.replyTo??null]));
-      if (old.digest !== digest && !legacyMatch) fail('idempotency_conflict'); return this.message(old.id);
-    }
-    if (!this.one('SELECT id FROM sessions WHERE id=? AND workspace=? AND revoked=0', data.to, actor.workspace)) fail('not_found');
-    if (data.replyTo && !this.one('SELECT id FROM messages WHERE id=? AND workspace=? AND recipient=? AND sender=?', data.replyTo, actor.workspace, actor.id, data.to)) fail('invalid_reply');
-    const now = decisionTime;
-    const due = now + Math.max(queuePolicy.delay_ms[data.priority], data.delayMs);
-    if (now + data.ttlMs <= due) fail('expiry_before_delivery');
-    this.maintain(data.to, now);
-    if (data.priority==='urgent' && this.one<{n:number}>("SELECT count(*) n FROM messages WHERE sender=? AND priority='urgent' AND created_ms>?", actor.id, now-queuePolicy.urgent_window_ms)!.n >= queuePolicy.urgent_limit) fail('urgent_quota_exceeded');
-    const count = this.one<{ n: number }>("SELECT count(*) n FROM messages WHERE recipient=? AND status IN ('queued','in_flight')", data.to)!.n;
-    if (count >= queuePolicy.capacity) fail('inbox_full');
-    const messageId = randomUUID();
-    this.run("INSERT INTO messages(id,workspace,sender,recipient,body,reply_to,created_at,key,digest,status,priority,urgent_reason,created_ms,due_at,expires_at,legacy) VALUES(?,?,?,?,?,?,?,?,?,'queued',?,?,?,?,?,0)", messageId, actor.workspace, actor.id, data.to, data.body, data.replyTo ?? null, new Date(now).toISOString(), data.key, digest, data.priority, data.urgentReason??null, now, due, now+data.ttlMs);
-    this.event(actor.workspace, 'message.queued', messageId);
-    return this.message(messageId);
-  }
+  private enqueue(actor:Session,input:z.input<typeof sendSchema>,decisionTime=this.clock.now()):Message{return messageQueue(this.db).enqueue(actor,input,decisionTime);}
   private message(messageId: string) { return this.one<Message>('SELECT seq,id,workspace,sender,recipient,body,reply_to,status,created_at FROM messages WHERE id=?', messageId)!; }
   inbox(actor: Session, after = 0, limit = 10) {
     z.number().int().min(0).parse(after); z.number().int().min(1).max(50).parse(limit);
@@ -172,20 +151,7 @@ export class Store {
     if (row.sender!==actor.id && row.delivered_at===null) fail('message_not_delivered');
     return { id: row.id, ...range(row.body, offset, limit) };
   }
-  private maintain(recipient: string, now: number) {
-    this.requests.expireWithinTransaction(now);
-    const rows=this.all<QueuedMessage>("SELECT * FROM messages WHERE recipient=? AND status IN ('queued','in_flight')",recipient);
-    for (const row of rows) {
-      if (row.expires_at!==null && row.expires_at<=now) {
-        this.run("UPDATE messages SET status='expired',lease_until=NULL WHERE id=?",row.id);
-        this.event(row.workspace,'message.expired',row.id);
-      } else if(row.status==='in_flight' && row.lease_until!<=now) {
-        const status=row.attempts>=queuePolicy.max_attempts?'dead_letter':'queued';
-        this.run('UPDATE messages SET status=?,due_at=?,lease_until=NULL WHERE id=?',status,row.lease_until!+retryDelay(row.attempts),row.id);
-        this.event(row.workspace,`message.${status}`,row.id);
-      }
-    }
-  }
+  private maintain(recipient:string,now:number){messageQueue(this.db).maintain(recipient,now);}
   private availability(actor: Session) { return this.one<{availability:string}>('SELECT availability FROM sessions WHERE id=?',actor.id)!.availability; }
   setSessionState(actor: Session, state: string) {
     z.enum(['available','busy','paused']).parse(state);
