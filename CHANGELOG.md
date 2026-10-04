@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.16 — 2026-10-05
+
+- Verify the owned child's birth identity and exact accepted loopback TCP tuple with parent-only macOS kernel inspection before sending any HTTP bytes; hand that same stream to a request-local Agent.
+- Keep authentication fenced during bounded read-only acceptance checks, socket failure, deadline and close; each subsequent connection requires fresh verification and no HTTP replay occurs.
+- Bound inspector concurrency and output, validate private helper staging, and confirm compiler/helper process-group disappearance plus stdio close before cleanup; uncertain cleanup retains an explicit retry handle.
+- Reject a replacement listener without disclosing HTTP authentication or payload. Keep native model execution, provider auth/network, controller integration and automatic wake unverified.
+
 ## 0.1.0-alpha.15 — 2026-10-05
 
 - Add a fresh owned OpenCode1.18.34 factory with clean private environment, pre-spawn macOS boundary and ownership fence before native bootstrap.
