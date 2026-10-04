@@ -152,3 +152,10 @@ CodexRpc는 newline JSON 메시지의 분할 UTF-8·여러 frame·동시 응답 
 설치된 Codex0.146.0의 기본 generated schema와 `--experimental` schema를 구분한다. 실험적 `permissions`/`permissionProfile`과 `activePermissionProfile`을 확인한 별도 비모델 probe에서 fresh isolated profile·ephemeral thread 생성/조회, explicit named profile 원문 읽기 허용·외부 원문/프로필 canary/symlink 읽기 거부·쓰기 거부를 확인했다. Credential 복사·model turn·기존 session resume는0이다. 동일 RPC 코드를 실제 initialize→thread/start→identity read→scoped command/exec에 적용해 확인했다. 이는 macOS installed-version 비모델 증거이며 실제 모델의 협업·read scope 및 Linux native 검증은 별도다.
 
 [공식 permission profiles](https://learn.chatgpt.com/docs/permissions)와 [app-server 계약](https://learn.chatgpt.com/docs/app-server)은 beta 필드가 변경될 수 있음을 전제로 사용한다. Legacy readOnly 단독 정책은 실제 외부 canary 읽기를 허용했으므로 선택한 원문 범위를 증명하지 못한다. 현재 controller의 mock-only 권한과 auto_wake:false는 유지하며 canonical owned profile/machine-wide fence/actual turn·interrupt·재접속 및 scheduler 연결을 계속 구현한다. Immutable alpha.7 배포 파일에는 이후 개발 변경을 소급하지 않는다.
+
+
+## Alpha.8: 내부 native profile 소유권 보호
+
+NativeProfileFence는 private canonical profile에 durable owner metadata와 별도의 SQLite lifetime lock을 만든다. Native ID 저장 중에도 lock을 유지하므로 정상 상태 조회가 살아 있는 소유권을 해제하지 않는다. Lock 소유자를 확인할 수 없는 경우 unknown을 저장하며, metadata 저장이 다른 reader에 막히면 owned로 오인하지 않고 조회를 실패시킨다. 동시 상태 검사는 별도 inspection mutex로 직렬화해 다른 검사자의 잠금을 살아 있는 소유자로 오인하지 않는다. 기존 owner record는 자동 채택하지 않는다. Direct symlink(끝 slash 포함), 비공개가 아닌 권한, hardlink/비정규 owner 파일을 거부한다. 이 내부 helper는 실제 host readiness나 비협력 프로그램의 배제를 보장하지 않는다.
+
+독립 process 강제 종료와 metadata commit 경쟁 조건을 회귀 검증했다. 설치된 Codex0.146.0의 격리된 비모델 probe에서 native thread identity 저장·소유권 조회·허용 원문 읽기·외부 canary 읽기 거부·host 종료 후 unknown을 확인했다. Credential 복사, model turn, 기존 session resume는0이다. Controller 연결·사용자 owned profile 인증·실제 모델 turn/interrupt/reconnect·자동 wake scheduler는 후속 gate이며 Cooperative 협업과 Managed/Attached 구분은 유지한다. Alpha.8은 schema13이고 alpha.7의 immutable artifact를 변경하지 않는다.

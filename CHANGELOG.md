@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.8 — 2026-10-04
+
+- Add bounded internal Codex app-server RPC framing, request limits and fail-closed transport handling.
+- Add private canonical-profile ownership with an uninterrupted process lock, durable native identity and unknown state after holder loss. Existing records cannot be automatically adopted.
+- Cover metadata commit races, blocked inspection, process crashes and unsafe profile paths with regression tests.
+- Verify the internal RPC and ownership fence against an isolated installed Codex host without model turns, credential copying or existing-session resume. Native model collaboration and automatic wake remain unverified.
+
 ## 0.1.0-alpha.6 — 2026-10-04
 
 - Add shared collaboration skills for Codex, Claude Code and OpenCode, with an OpenCode command and a credential-free project installer.
