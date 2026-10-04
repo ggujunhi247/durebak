@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.11 — 2026-10-04
+
+- Add internal OpenCode outcome observation bound to exact session, parent message and selected model; provider errors, ambiguous replies and tool-bearing candidates cannot be reported as successful answers.
+- Add a bounded loopback HTTP transport with private in-memory Basic authentication, fixed input directory, wall-clock deadlines and no automatic POST retry.
+- Strengthen Codex bootstrap refusal tests with explicit stage evidence and a delayed-start regression, preserving production timeout and ownership rules.
+- Installed OpenCode1.18.34 non-model transport and skill discovery checks pass. The synthetic free-model attempt returned APIError403; actual heterogeneous model execution and automatic native wake remain unverified.
+
 ## 0.1.0-alpha.10 — 2026-10-04
 
 - Preserve exact completed native Codex answers as immutable profile-local snapshots with source identity, item identity and SHA-256 evidence.
