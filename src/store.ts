@@ -6,6 +6,7 @@ import { bridgeHealth, type BridgeObservation, type SessionHealth } from './heal
 import { openDatabase } from './database.js';
 import { transaction } from './transactions.js';
 import { encodedPreview, preview, range } from './content.js';
+import {ProtectedTasks} from './protected-tasks.js';
 import {RequestPreviewRepository} from './request-preview.js';
 import { RequestRepository,requestPayloadSchema,requestCreateSchema,requestMessageSchema,checkpointSchema,type RequestState } from './requests.js';
 import { queuePolicy, retryDelay, canDeliver, deliveryRank } from './queue-policy.js';
@@ -20,11 +21,13 @@ export class Store {
   private readonly db: DatabaseSync;
   private closed = false;
   private readonly requests: RequestRepository;
+  private readonly protectedTasks:ProtectedTasks;
   private readonly previews: RequestPreviewRepository;
   constructor(readonly directory: string, private readonly clock = { now: () => Date.now() }) {
     this.db = openDatabase(directory);
+    this.protectedTasks=new ProtectedTasks(this.db);
     this.previews=new RequestPreviewRepository(this.db,this.clock);
-    this.requests=new RequestRepository(this.db,this.clock,(actor,input,now)=>this.enqueue(actor,input,now),(actor,id,payload,now)=>this.previews.validate(actor,id,payload,now));
+    this.requests=new RequestRepository(this.db,this.clock,(actor,input,now)=>this.enqueue(actor,input,now),(actor,id,payload,now)=>this.previews.validate(actor,id,payload,now),this.protectedTasks);
   }
   close() { if (!this.closed) { this.db.close(); this.closed = true; } }
   private one<T>(sql: string, ...values: SQLInputValue[]): T | undefined { return this.db.prepare(sql).get(...values) as T | undefined; }
@@ -84,12 +87,13 @@ export class Store {
   }
   send(actor: Session, input: z.input<typeof sendSchema>): Message { return this.transaction(()=>this.enqueue(actor,input)); }
   requestPreview(actor:Session,input:z.input<typeof requestPayloadSchema>){return this.previews.create(actor,input);}
-  requestPreviewRead(actor:Session,id:string,offset=0,limit=4096){return this.previews.read(actor,id,offset,limit);}
+  requestPreviewRead(actor:Session,id:string,offset=0,limit=4096,part:'body'|'criteria'='body'){return this.previews.read(actor,id,offset,limit,part);}
   requestCreate(actor:Session,input:z.input<typeof requestCreateSchema>){return this.requests.create(actor,input);}
+  requestTaskRead(actor:Session,id:string,offset=0,limit=4096){return this.requests.taskRead(actor,id,offset,limit);}
   requestGet(actor:Session,id:string){return this.requests.get(actor,id);}
   requestList(actor:Session,after='',limit=10){return this.requests.list(actor,after,limit);}
   requestMessages(actor:Session,id:string,after=0,limit=10){return this.requests.messages(actor,id,after,limit);}
-  requestTransition(actor:Session,id:string,version:number,state:Exclude<RequestState,'pending'|'completed'|'timed_out'>,reason:{reasonCode?:string;detail?:string}={}){return this.requests.transition(actor,id,version,state,reason);}
+  requestTransition(actor:Session,id:string,version:number,state:Exclude<RequestState,'pending'|'completed'|'timed_out'>,reason:{reasonCode?:string;detail?:string;expectedTaskVersion?:number}={}){return this.requests.transition(actor,id,version,state,reason);}
   requestMessage(actor:Session,input:z.input<typeof requestMessageSchema>){return this.requests.message(actor,input);}
   requestControls(actor:Session,after=0,limit=10){return this.requests.controls(actor,after,limit);}
   controlAck(actor:Session,cursor:number){return this.requests.controlAck(actor,cursor);}
@@ -224,15 +228,19 @@ export class Store {
     });
   }
   getTask(actor: Session, taskId: string): Task {
+    if(this.db.isTransaction)this.requests.expireWithinTransaction();else this.requests.expire();
+    this.protectedTasks.authorize(actor,taskId);
     const task = this.one<Task>('SELECT id,workspace,creator,title,criteria,state,owner,version,result_hash,created_at FROM tasks WHERE id=? AND workspace=?', taskId, actor.workspace);
     if (!task) fail('not_found'); return task;
   }
   tasks(actor: Session, after = '', limit = 10) {
+    this.requests.expire();
     z.number().int().min(1).max(50).parse(limit); z.string().max(200).parse(after);
-    const rows = this.all<Pick<Task, 'id' | 'title' | 'state' | 'version'>>('SELECT id,title,state,version FROM tasks WHERE workspace=? AND id>? ORDER BY id LIMIT ?', actor.workspace, after, limit + 1);
+    const rows = this.all<Pick<Task, 'id' | 'title' | 'state' | 'version'>>('SELECT t.id,t.title,t.state,t.version FROM tasks t WHERE t.workspace=? AND t.id>? AND NOT EXISTS (SELECT 1 FROM request_tasks rt JOIN requests r ON r.id=rt.request_id JOIN messages m ON m.id=r.message_id WHERE rt.task_id=t.id AND (r.creator<>? AND r.recipient<>? OR r.recipient=? AND m.delivered_at IS NULL)) ORDER BY t.id LIMIT ?', actor.workspace, after,actor.id,actor.id,actor.id, limit + 1);
     const items = rows.slice(0, limit); return { items, next: items.at(-1)?.id ?? after, has_more: rows.length > limit };
   }
   claim(actor: Session, taskId: string, version: number): Task {
+    this.protectedTasks.guardLegacyMutation(actor,taskId);
     return this.transaction(() => {
       const changed = this.run("UPDATE tasks SET state='claimed',owner=?,version=version+1 WHERE id=? AND workspace=? AND state='pending' AND version=?", actor.id, taskId, actor.workspace, version);
       if (changed.changes !== 1) fail('claim_conflict');
@@ -240,6 +248,7 @@ export class Store {
     });
   }
   complete(actor: Session, taskId: string, version: number, resultHash: string): Task {
+    this.protectedTasks.guardLegacyMutation(actor,taskId);
     return this.transaction(() => {
       if (!this.one('SELECT hash FROM artifacts WHERE workspace=? AND hash=?', actor.workspace, resultHash)) fail('artifact_not_found');
       const changed = this.run("UPDATE tasks SET state='completed',result_hash=?,version=version+1 WHERE id=? AND workspace=? AND owner=? AND state='claimed' AND version=?", resultHash, taskId, actor.workspace, actor.id, version);
@@ -248,6 +257,7 @@ export class Store {
     });
   }
   cancel(actor: Session, taskId: string, version: number): Task {
+    this.protectedTasks.guardLegacyMutation(actor,taskId);
     return this.transaction(() => {
       const changed = this.run("UPDATE tasks SET state='cancelled',version=version+1 WHERE id=? AND workspace=? AND creator=? AND state IN ('pending','claimed') AND version=?", taskId, actor.workspace, actor.id, version);
       if (changed.changes !== 1) fail('claim_conflict');
@@ -280,7 +290,7 @@ export class Store {
   clearCache(actor: Session) { return { deleted: Number(this.run('DELETE FROM cache WHERE workspace=?', actor.workspace).changes) }; }
   events(actor: Session, after = 0, limit = 20) {
     z.number().int().min(0).parse(after); z.number().int().min(1).max(50).parse(limit);
-    const rows = this.all<{ seq: number; kind: string; entity: string; created_at: string }>('SELECT e.seq,e.kind,e.entity,e.created_at FROM events e WHERE e.workspace=? AND e.seq>? AND NOT EXISTS (SELECT 1 FROM request_messages rm JOIN requests r ON r.id=rm.request_id WHERE rm.message_id=e.entity AND r.creator<>? AND r.recipient<>?) ORDER BY e.seq LIMIT ?', actor.workspace, after, actor.id,actor.id,limit + 1);
+    const rows = this.all<{ seq: number; kind: string; entity: string; created_at: string }>('SELECT e.seq,e.kind,e.entity,e.created_at FROM events e WHERE e.workspace=? AND e.seq>? AND NOT EXISTS (SELECT 1 FROM request_messages rm JOIN requests r ON r.id=rm.request_id WHERE rm.message_id=e.entity AND r.creator<>? AND r.recipient<>?) AND NOT EXISTS (SELECT 1 FROM request_tasks rt JOIN requests r ON r.id=rt.request_id JOIN messages m ON m.id=r.message_id WHERE rt.task_id=e.entity AND (r.creator<>? AND r.recipient<>? OR r.recipient=? AND m.delivered_at IS NULL)) ORDER BY e.seq LIMIT ?', actor.workspace, after, actor.id,actor.id,actor.id,actor.id,actor.id,limit + 1);
     const items = rows.slice(0, limit); return { items, next: items.at(-1)?.seq ?? after, has_more: rows.length > limit };
   }
   record(actor: Session, taskId: string) {

@@ -37,4 +37,17 @@ test('HTTP and real MCP share request ACL, delivery, completion and recovery che
  const cp=await call('checkpoint_set',{consumer:'worker',version:0,messageCursor:cursor,controlCursor:0});
  assert.equal((await http(b.token,'checkpoint_get',{consumer:'worker'})).version,cp.version);
  assert((await http(a.token,'runtime_info')).capabilities.includes('request_threads_v1'));
+ const protectedInput={to:b.session.id,body:'protected question',key:'protected',priority:'urgent',urgentReason:'test immediate task',task:{title:'private task',criteria:'private criteria'}};
+ const taskPreview=await http(a.token,'request_preview',{request:protectedInput});
+ assert.equal((await http(a.token,'request_preview_read',{id:taskPreview.id,part:'criteria'})).content,'private criteria');
+ const protectedRequest=await http(a.token,'request_create',{...protectedInput,previewId:taskPreview.id});
+ await assert.rejects(http(c.token,'task_get',{id:protectedRequest.task.id}),/not_found/);
+ await assert.rejects(http(b.token,'request_task_read',{id:protectedRequest.id}),/message_not_delivered/);
+ const taskDelivery=await call('receive',{});await call('ack',{id:taskDelivery.items[0].id,receipt:taskDelivery.items[0].receipt});
+ assert.equal((await call('request_task_read',{id:protectedRequest.id})).content,'private criteria');
+ await assert.rejects(http(b.token,'task_claim',{id:protectedRequest.task.id,version:1}),/linked_request_operation_required/);
+ await call('request_transition',{id:protectedRequest.id,version:1,state:'accepted',expectedTaskVersion:1});
+ const artifact=await call('artifact_put',{content:'workspace-visible result'});
+ await call('request_message',{id:protectedRequest.id,version:2,kind:'result',body:'protected result',key:'protected-result',expectedTaskVersion:2,hash:artifact.hash});
+ assert.equal((await http(a.token,'request_get',{id:protectedRequest.id})).task.state,'completed');
 });
