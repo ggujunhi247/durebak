@@ -1,0 +1,26 @@
+import {DatabaseSync} from 'node:sqlite';
+import {closeSync,constants,lstatSync,openSync,realpathSync} from 'node:fs';
+import {join} from 'node:path';
+import {randomUUID} from 'node:crypto';
+import {short,fail} from './domain.js';
+interface Owner {id:string;instance:string;epoch:number;native_id:string|null;state:'owned'|'unknown'}
+const busy=(error:unknown)=>error instanceof Error&&/locked|busy/.test(error.message);
+function profilePath(path:string){const normalized=path.replace(/\/+$/,'')||'/',stat=lstatSync(normalized);if(stat.isSymbolicLink())fail('native_profile_symlink');if(!stat.isDirectory()||(stat.mode&0o077)!==0||stat.uid!==process.getuid?.())fail('native_profile_not_private');return realpathSync.native(normalized);}
+function validateFile(path:string){let stat;try{stat=lstatSync(path);}catch{fail('native_fence_invalid');}if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1||(stat.mode&0o077)!==0||stat.uid!==process.getuid?.())fail('native_fence_unsafe');}
+function createFile(path:string){let fd:number;try{fd=openSync(path,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);}catch(error){if((error as NodeJS.ErrnoException).code==='EEXIST'){validateFile(path);fail('native_owner_exists');}fail('native_fence_unavailable');}closeSync(fd);}
+function readOwner(db:DatabaseSync):Owner{if((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version!==1)fail('native_fence_invalid');const rows=db.prepare('SELECT * FROM owner').all() as unknown as Owner[];const owner=rows[0];if(rows.length!==1||!owner||typeof owner.id!=='string'||typeof owner.instance!=='string'||owner.epoch!==1||(owner.state!=='owned'&&owner.state!=='unknown')||(owner.native_id!==null&&typeof owner.native_id!=='string'))fail('native_fence_invalid');return owner;}
+// The dedicated lock connection never commits while owned. Metadata commits
+// cannot open a takeover gap. This excludes cooperating runtimes only: it is
+// not proof of host readiness. Existing ownership is never auto-reclaimed.
+export class NativeProfileFence {
+ private closed=false;
+ private constructor(private db:DatabaseSync,private lock:DatabaseSync,private owner:Owner){}
+ static claim(path:string,instance:string){short.parse(instance);const profile=profilePath(path),file=join(profile,'.durebak-owner.sqlite'),lockFile=join(profile,'.durebak-owner-lock.sqlite');createFile(file);
+  let db:DatabaseSync|undefined,lock:DatabaseSync|undefined;try{db=new DatabaseSync(file);db.exec("PRAGMA synchronous=FULL; PRAGMA journal_mode=DELETE; CREATE TABLE owner(id TEXT PRIMARY KEY,instance TEXT NOT NULL,epoch INTEGER NOT NULL,native_id TEXT,state TEXT NOT NULL CHECK(state IN ('owned','unknown'))) STRICT; PRAGMA user_version=1;");const owner:Owner={id:randomUUID(),instance,epoch:1,native_id:null,state:'owned'};db.prepare('INSERT INTO owner VALUES(?,?,?,?,?)').run(owner.id,instance,1,null,'unknown');createFile(lockFile);lock=new DatabaseSync(lockFile);lock.exec('PRAGMA synchronous=FULL; PRAGMA journal_mode=DELETE; PRAGMA user_version=1;');lock.exec('BEGIN IMMEDIATE');if(db.prepare("UPDATE owner SET state='owned' WHERE id=? AND epoch=1 AND state='unknown'").run(owner.id).changes!==1)fail('native_owner_conflict');return new NativeProfileFence(db,lock,owner);}catch{lock?.close();db?.close();fail('native_fence_unknown');}
+ }
+ static inspect(path:string):Owner{const profile=profilePath(path),file=join(profile,'.durebak-owner.sqlite'),lockFile=join(profile,'.durebak-owner-lock.sqlite');validateFile(file);validateFile(lockFile);let db:DatabaseSync|undefined,lock:DatabaseSync|undefined;try{db=new DatabaseSync(file);readOwner(db);lock=new DatabaseSync(lockFile);if((lock.prepare('PRAGMA user_version').get() as {user_version:number}).user_version!==1)fail('native_fence_invalid');try{lock.exec('BEGIN IMMEDIATE');}catch(error){if(busy(error))return {...readOwner(db)};throw error;}const owner=readOwner(db);db.prepare("UPDATE owner SET state='unknown' WHERE id=?").run(owner.id);return {...owner,state:'unknown'};}catch{return fail('native_fence_invalid');}finally{lock?.close();db?.close();}}
+ private assertOpen(){if(this.closed)fail('native_owner_closed');}
+ status(){this.assertOpen();return {...this.owner};}
+ recordNative(nativeId:string){short.parse(nativeId);this.assertOpen();if(this.owner.native_id&&this.owner.native_id!==nativeId)fail('native_identity_conflict');if(this.owner.native_id===nativeId)return;try{this.db.exec('BEGIN IMMEDIATE');if(this.db.prepare('UPDATE owner SET native_id=? WHERE id=? AND epoch=? AND state=? AND native_id IS NULL').run(nativeId,this.owner.id,this.owner.epoch,'owned').changes!==1)fail('native_owner_conflict');this.db.exec('COMMIT');this.owner.native_id=nativeId;}catch{try{this.close();}catch{}fail('native_fence_unknown');}}
+ close(){if(this.closed)return;this.closed=true;let failed=false;try{if(this.db.isTransaction)this.db.exec('ROLLBACK');this.db.prepare("UPDATE owner SET state='unknown' WHERE id=?").run(this.owner.id);}catch{failed=true;}finally{this.lock.close();this.db.close();}if(failed)fail('native_fence_unknown');}
+}
