@@ -176,3 +176,9 @@ CodexTurns는 live NativeProfileFence의 canonical profile·native ID·epoch·in
 정상·비정상 종료 모두 즉시 native interface를 retire하고 owned process group에만 TERM/KILL을 전달한다. 부모 close 이벤트뿐 아니라 남은 group이 없음을 확인한 후에만 fence를 해제한다. 하위 프로세스가 pipe를 상속하거나 TERM을 무시하는 경우도 회귀 검증했다. 종료 불확실 상태에서는 fence를 유지하며 자동 takeover하지 않는다. Installed macOS Codex의 같은 factory 비모델 probe는 통과했지만 model entitlement·모든 model tool isolation·실제 협업/interrupt/restart는 별도 gate다. Controller는 mock-only, auto_wake:false를 유지한다.
 
 Release workflow의 GitHub delivery와 npm publisher를 독립 job으로 분리했다. 두 경로 모두 동일한 CI pack과 checksum을 사용하며 Linux/macOS 검증·secret scan·installed smoke 이후에만 배포한다. npm 인증 실패가 검증된 GitHub artifact 배포를 막지 않으며, npm 게시 성공 여부는 registry bytes로 따로 확인한다. 이전 immutable alpha.8 artifact는 변경하지 않는다.
+
+## Alpha.9 이후 개발: exact native 답변 원문
+
+CodexTurns.readOutput은 접수가 확인된 exact native turn의 completed 상태에서 답변 하나만 선택한다. 명시적 final_answer가 없으면 한 개 phase-unknown agentMessage만 legacy fallback으로 표시하며, 복수 후보·중복 item identity·빈/64KiB 초과 답변은 거부한다. Commentary·reasoning·tool output·user input·다른 turn은 결과 원문으로 반환하지 않는다. Native 완료 상태는 Durebak 요청 완료나 independent verification과 구분한다.
+
+Profile-local ledger v1→v2에 immutable 선택 답변/hash/item ID snapshot을 추가한다. 기존 source·turn receipt는 보존하고 같은 live owner 안의 재접속은 snapshot을 다시 수집하지 않는다. UTF-8 byte cursor와 페이지 상한을 적용하며, source identity 또는 owner가 달라지면 cached 원문도 읽지 못한다. Concurrent 첫 읽기의 출력이 다르면 최초 snapshot을 유지하고 충돌을 거부한다. 이 내부 원문 경로는 실제 모델 답변 검증과 선택 결과 전달의 기반이며 실제 모델 실행·native controller authority·자동 wake 지원을 추가하지 않는다. Immutable alpha.9 배포 파일에는 이후 변경을 소급하지 않는다.
