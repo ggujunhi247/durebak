@@ -118,3 +118,17 @@ Read-only mock 경로에서만 사용할 내부 WorkReservations gate를 추가�
 독립 리뷰에서 원래 grant의 continuation 예산 누락과 live waiter 없는 answer/result 실행 가능성을 발견했다. Request마다 새 grant scope를 만들지 않도록 보강하고, correlated waiter producer가 없는 이 단계에서는 answer/result 예약을 continuation_waiter_missing으로 명시적으로 차단한다. 완전한 result-prefix 원문 수집은 WorkInput에서 준비되지만 실행 권한을 뜻하지 않는다. Public CLI/HTTP/MCP에는 예약/제출 operation을 노출하지 않으며 auto_wake:false·host unverified를 유지한다.
 
 기존 migration1–10 SQL은 유지하고 schema11을 추가한다. Alpha.6 immutable release는 schema10이며 이 개발 변경은 해당 release 파일이나 npm 지원 주장에 소급하지 않는다.
+
+## schema12 개발: 모의 driver 접수·중단·재접속
+
+내부 ExecutionController는 factory가 발급한 read-only mock만 사용한다. 구조가 같은 객체나 peer의 read-only 선언은 실행 근거가 아니다. Declared binding/profile/native ID·owner epoch/instance와 원문 digest를 검사하고 durable submitting 이후에만 mock submit을 호출한다. 실제 Provider·모델·네트워크 도구 호출은 없고 public CLI/HTTP/MCP operation은 추가하지 않는다.
+
+접수 receipt는 attempt/epoch/instance/source digest/native turn ID와 연결한다. 입력 접수가 확인되면 전체 예약 prefix의 최초 전달과 audit를 같은 transaction에 기록한다. 메시지 상태 delivered는 read·request accepted와 구분하고 일반 receive로 재전달하지 않는다. Host turn succeeded는 요청 완료나 revision 검증 통과가 아니다. waiting_user는 소유권/동시 슬롯을 유지하고 자동 승인이나 다른 턴을 시작하지 않는다.
+
+응답 유실·관측 불가·접수 후 DB 저장 실패는 durable intent를 유지해 unknown으로 격리한다. 재접속은 같은 attempt를 관측하며 새 submit을 하지 않는다. Known-unsubmitted reservation 또는 input-not-accepted 확인만 turn을 반환하고, 접수된 실행은 terminal 확인 후 동시 슬롯만 반환한다. 중복 관측은 예산을 반복 반환하지 않는다.
+
+Policy off·session pause·request 취소/기한·grant 만료는 중단 의도를 먼저 저장하고 특정 mock attempt를 interrupt한다. Stop 요청/확인/unknown을 구분하고 unknown에서는 예산·단일 native owner fence를 유지한다. 중단 요청은 CAS로 한 번만 획득하고 재접속이 같은 interrupt를 자동 반복하지 않는다. Request timeout은 기존 task 취소 및 양쪽 control notice 계약을 공유한다.
+
+독립 리뷰에서 관측·재시도 경로의 clock high-water 누락과 host busy 상태에서 기존 intent key 복구 실패를 발견했다. 실패 회귀 후 작업 진입·early rejection·replay·terminal receipt·응답 유실에서 durable owner/grant expiry를 관측하도록 수정했다. Owner lease 만료는 unknown을 유지하며 자동 갱신/인계하지 않는다. Deadline/만료는 clock rollback이나 peer read 부재로 부활하지 않는다.
+
+Schema1–11 migration은 유지하고 schema12에 outcome/control 열만 추가한다. Living continuation·child provenance·actual native model wake와 지원 Provider 확대는 아직 별도 gate이며 answer/result reservation은 계속 차단한다. Alpha.6 immutable artifact(schema10)에 이 개발 내용을 소급하지 않는다.
