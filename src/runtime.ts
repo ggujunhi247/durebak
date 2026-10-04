@@ -43,6 +43,7 @@ export const operations = {
   control_ack:z.object({cursor:z.number().int().positive()}).strict(),
   checkpoint_get:z.object({consumer:identifier}).strict(),
   checkpoint_set:checkpointSchema,
+  collaboration_status:z.object({sessionAfter:z.string().max(200).default(''),requestAfter:z.string().max(200).default('')}).strict(),
   runtime_info: empty,
   bridge_touch: z.object({instance:z.string().uuid(),epoch:z.string().regex(/^[a-f0-9]{32}$/)}).strict(),
   bridge_close: z.object({instance:z.string().uuid(),epoch:z.string().regex(/^[a-f0-9]{32}$/)}).strict(),
@@ -97,7 +98,8 @@ function dispatch(store: Store, actor: Session, operation: Operation, input: unk
     case 'control_ack':return store.controlAck(actor,operations.control_ack.parse(input).cursor);
     case 'checkpoint_get':return store.checkpointGet(actor,operations.checkpoint_get.parse(input).consumer);
     case 'checkpoint_set':return store.checkpointSet(actor,checkpointSchema.parse(input));
-    case 'runtime_info': empty.parse(input); return { version, protocol_version: protocolVersion, schema_version: schemaVersion, session_id: actor.id, daemon_epoch: epoch, capabilities:['session_health_v1','request_threads_v1','request_controls_v1','consumer_checkpoints_v1','request_preview_v1','protected_request_tasks_v1','private_attachments_v1','revision_verification_v1'] };
+    case 'collaboration_status':return store.collaborationStatus(actor,epoch,operations.collaboration_status.parse(input));
+    case 'runtime_info': empty.parse(input); return { version, protocol_version: protocolVersion, schema_version: schemaVersion, session_id: actor.id, daemon_epoch: epoch, capabilities:['session_health_v1','request_threads_v1','request_controls_v1','consumer_checkpoints_v1','request_preview_v1','protected_request_tasks_v1','private_attachments_v1','revision_verification_v1','collaboration_status_v1'] };
     case 'session_health': {const a=operations.session_health.parse(input);return store.sessionHealth(actor,a.id??actor.id,epoch);}
     case 'bridge_touch': {const a=operations.bridge_touch.parse(input);if(a.epoch!==epoch)fail('daemon_epoch_mismatch');return store.bridgeTouch(actor,a.instance,epoch);}
     case 'bridge_close': {const a=operations.bridge_close.parse(input);if(a.epoch!==epoch)fail('daemon_epoch_mismatch');return store.bridgeClose(actor,a.instance,epoch);}
@@ -176,7 +178,7 @@ export async function startRuntime(directory: string) {
       const actor = store.authenticate(token);
       if (!actor) { respond(res, 401, { error: 'unauthorized' }); return; }
       const input = z.object({ operation: z.enum(Object.keys(operations) as [Operation, ...Operation[]]), args: z.unknown() }).strict().parse(body);
-      if (!['runtime_info','sessions','session_health','bridge_touch','bridge_close','events','request_get','request_list','request_messages','checkpoint_get','request_preview','request_preview_read','request_task_read','task_get','tasks','record','attachment_upload_read','attachment_read','request_attachments','request_revisions','request_evidence_list','request_evidence_read','request_verification','request_bundle'].includes(input.operation)) store.activityTouch(actor);
+      if (!['collaboration_status','runtime_info','sessions','session_health','bridge_touch','bridge_close','events','request_get','request_list','request_messages','checkpoint_get','request_preview','request_preview_read','request_task_read','task_get','tasks','record','attachment_upload_read','attachment_read','request_attachments','request_revisions','request_evidence_list','request_evidence_read','request_verification','request_bundle'].includes(input.operation)) store.activityTouch(actor);
       respond(res, 200, dispatch(store, actor, input.operation, input.args, instance));
     } catch (error) {
       const code = error instanceof DomainError ? error.code : error instanceof z.ZodError ? 'invalid_input' : 'internal_error';
