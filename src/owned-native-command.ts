@@ -29,8 +29,7 @@ export class OwnedNativeCommand {
   const deadline=Date.now()+1500;
   const gone=()=>{if(!this.pid)return this.#closed;try{process.kill(-this.pid,0);return false;}catch(error){return (error as NodeJS.ErrnoException).code==='ESRCH';}};
   // Only the detached group created here is addressed. EPERM is uncertainty.
-  if(this.pid&&!gone()){try{process.kill(-this.pid,'SIGKILL');}catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')fail('native_command_cleanup_unknown');}}
-  while(Date.now()<deadline){if(this.#closed&&gone()){this.#retired=true;return;}await delay(10);}
+  while(Date.now()<deadline){const absent=gone();if(this.#closed&&absent){this.#retired=true;return;}if(this.pid&&!absent){try{process.kill(-this.pid,'SIGKILL');}catch(error){if(!['ESRCH','EPERM'].includes((error as NodeJS.ErrnoException).code??''))fail('native_command_cleanup_unknown');}}await delay(10);}
   fail('native_command_cleanup_unknown');
  }
 }
