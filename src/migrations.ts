@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { fail } from './domain.js';
 import { transaction } from './transactions.js';
 
-export const schemaVersion = 10;
+export const schemaVersion = 11;
 
 // Preserve released migration SQL and append new versions at the end.
 export function migrate(db: DatabaseSync) {
@@ -201,6 +201,31 @@ export function migrate(db: DatabaseSync) {
             digest TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(binding_id,key)
           ) STRICT;
           PRAGMA user_version=10;
+        `);
+      }
+      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 11) {
+        db.exec(`
+          CREATE TABLE work_scopes (
+            request_id TEXT PRIMARY KEY REFERENCES requests(id), scope_id TEXT NOT NULL,
+            owner_binding TEXT NOT NULL REFERENCES native_bindings(id), max_turns INTEGER NOT NULL,
+            max_concurrent INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+            spent_turns INTEGER NOT NULL DEFAULT 0, active_turns INTEGER NOT NULL DEFAULT 0
+          ) STRICT;
+          CREATE TABLE work_attempts (
+            id TEXT PRIMARY KEY, binding_id TEXT NOT NULL REFERENCES native_bindings(id),
+            workspace TEXT NOT NULL, request_id TEXT NOT NULL REFERENCES work_scopes(request_id),
+            message_id TEXT NOT NULL REFERENCES messages(id), epoch INTEGER NOT NULL, instance TEXT NOT NULL,
+            key TEXT NOT NULL, intent_digest TEXT NOT NULL, policy_digest TEXT NOT NULL, root_policy_digest TEXT NOT NULL,
+            source_digest TEXT NOT NULL, source TEXT NOT NULL, created_ms INTEGER NOT NULL,
+            state TEXT NOT NULL CHECK(state IN ('reserved','submitting','unknown','completed','cancelled')),
+            UNIQUE(binding_id,key)
+          ) STRICT;
+          CREATE TABLE work_reservations (
+            message_id TEXT PRIMARY KEY REFERENCES messages(id), attempt_id TEXT NOT NULL REFERENCES work_attempts(id)
+          ) STRICT;
+          CREATE INDEX work_attempt_binding ON work_attempts(binding_id,state);
+          CREATE INDEX work_attempt_workspace ON work_attempts(workspace,state);
+          PRAGMA user_version=11;
         `);
       }
     });
