@@ -107,3 +107,14 @@ alpha.5 immutable release는 schema9입니다. 이후 개발 소스는 관리자
 독립 코드 리뷰의 Important1건(부분 write 실패가 broken SKILL을 남겨 재설치 충돌)도 실패 회귀로 재현 후 exclusive open 직후 소유 파일을 추적하도록 수정했다. 동시 작성자의 EEXIST 파일은 보존한다. 실제 CLI installer와 도구별 생성 MCP config의 command/args로3개 독립 stdio bridge를 연결해 등록 provider codex/claude/opencode identity 사이6방향 private request·preview·수락·상관 result를 교환했다. 이 결과는 CLI/HTTP/MCP 프로토콜 검증이며 native discovery/모델 왕복 근거는 아래 별도 probe 범위와 구분한다.
 
 2026-10-04 별도 installed Codex0.146.0 discovery probe: 임시 독립 CODEX_HOME에서 app-server initialize→initialized→skills/list(forceReload)만 호출해 프로젝트의 `.agents/skills/durebak/SKILL.md`가 단일 enabled skill로 발견됨을 확인했다. Credential을 복사하지 않았고 thread/model turn 생성은0회이며 기존 활성 session을 resume하지 않았다. 이는 해당 CLI의 비모델 skill discovery 근거다. Claude/OpenCode discovery 및 실제 native 모델 협업·identity isolation·자동깨우기는 여전히 미검증이다. [공식 app-server skills 계약](https://developers.openai.com/codex/app-server/)과 설치된 CLI generated schema에 근거했으며 installer의 native_host_verified:false는 전체 호스트 협업 검증을 대신하지 않는다는 뜻이다.
+
+
+## schema11 개발: 내부 question 작업 예약
+
+Read-only mock 경로에서만 사용할 내부 WorkReservations gate를 추가한다. Owner secret/epoch/instance·grant·source를 확인한 같은 transaction에서 attempt·전체 pending prefix 잠금·grant 및 요청 예산을 저장한다. 일반 receive는 예약된 메시지를 전달하지 않는다. 준비와 예약은 delivered_at/receipt/read/accept를 만들지 않으며 모델/Provider를 호출하지 않는다. 별도 SQLite connection의 수신 및 재접속에서도 예약이 보존된다.
+
+총 turn은 durable grant scope에 연결하고 새로운 request나 off/on으로 초기화하지 않는다. Binding당 실행1개, workspace 예약/미확인 작업3개와 grant 한도를 검사한다. 제출 준비는 source/policy digest와 prefix 잠금을 재검증한 뒤 durable submitting으로 한 번만 전환한다. submitting replay는 submission_uncertain으로 거부하며 자동 재제출하지 않는다. Driver 접수·실행·결과 관측·interrupt·unknown reconciliation은 아직 없다. 취소된 예약의 자원 해제도 그 다음 gate에서 구현한다.
+
+독립 리뷰에서 원래 grant의 continuation 예산 누락과 live waiter 없는 answer/result 실행 가능성을 발견했다. Request마다 새 grant scope를 만들지 않도록 보강하고, correlated waiter producer가 없는 이 단계에서는 answer/result 예약을 continuation_waiter_missing으로 명시적으로 차단한다. 완전한 result-prefix 원문 수집은 WorkInput에서 준비되지만 실행 권한을 뜻하지 않는다. Public CLI/HTTP/MCP에는 예약/제출 operation을 노출하지 않으며 auto_wake:false·host unverified를 유지한다.
+
+기존 migration1–10 SQL은 유지하고 schema11을 추가한다. Alpha.6 immutable release는 schema10이며 이 개발 변경은 해당 release 파일이나 npm 지원 주장에 소급하지 않는다.

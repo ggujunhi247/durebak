@@ -215,7 +215,7 @@ export class Store {
     z.number().int().min(1).max(10).parse(limit);
     return this.transaction(()=>{
       const now=this.clock.now();this.maintain(actor.id,now);const state=this.availability(actor);
-      const rows=this.all<QueuedMessage>("SELECT * FROM messages WHERE recipient=? AND status='queued' AND due_at<=?",actor.id,now)
+      const rows=this.all<QueuedMessage>("SELECT * FROM messages WHERE recipient=? AND status='queued' AND due_at<=? AND NOT EXISTS (SELECT 1 FROM work_reservations wr WHERE wr.message_id=messages.id)",actor.id,now)
         .filter(r=>canDeliver(state,r.priority));
       rows.sort((a,b)=>deliveryRank(b,now)-deliveryRank(a,now)||a.seq-b.seq);
       const starving=rows.filter(r=>r.priority!=='urgent'&&now-r.due_at>=queuePolicy.starvation_ms).sort((a,b)=>a.due_at-b.due_at||a.seq-b.seq)[0];
