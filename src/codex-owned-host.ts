@@ -27,9 +27,10 @@ export async function startOwnedCodexHost(input:OwnedCodexOptions){
  const fence=NativeProfileFence.claim(profile,options.instance),env={PATH:process.env.PATH??'',...(process.env.HOME?{HOME:process.env.HOME}:{}),CODEX_HOME:profile};let child:ChildProcessWithoutNullStreams|undefined,rpc:CodexRpc|undefined,turns:CodexTurns|undefined,bindingId:string|undefined,closed=false,released=false,cleanupFailed=false,exited:Promise<void>|undefined,closing:Promise<void>|undefined;
  const retire=()=>{if(closed)return;closed=true;try{rpc?.close();}catch{cleanupFailed=true;}try{turns?.close();}catch{cleanupFailed=true;}};
  const release=()=>{if(released)return;try{fence.close();released=true;}catch{cleanupFailed=true;}};
- const signal=(name:NodeJS.Signals)=>{if(!child?.pid)return;try{process.kill(-child.pid,name);}catch(error){if((error as NodeJS.ErrnoException).code!=='ESRCH')throw error;}};
- const groupGone=()=>{if(!child?.pid)return true;try{process.kill(-child.pid,0);return false;}catch(error){if((error as NodeJS.ErrnoException).code==='ESRCH')return true;throw error;}};
+ const signal=(name:NodeJS.Signals)=>{if(!child?.pid)return;try{process.kill(-child.pid,name);}catch(error){if(!['ESRCH','EPERM'].includes((error as NodeJS.ErrnoException).code??''))throw error;}};
+ const groupGone=()=>{if(!child?.pid)return true;try{process.kill(-child.pid,0);return false;}catch(error){if((error as NodeJS.ErrnoException).code==='ESRCH')return true;if((error as NodeJS.ErrnoException).code==='EPERM')return false;throw error;}};
  const waitForExit=async()=>{const deadline=Date.now()+options.shutdownMs;while(!groupGone()){if(Date.now()>=deadline)fail('native_shutdown_timeout');await new Promise(resolve=>setTimeout(resolve,10));}if(exited)await within(exited,Math.max(1,deadline-Date.now()));};
+ // EPERM can occur during macOS zombie reaping; it remains pending, never gone.
  // Leader exit is insufficient: descendants may close their pipes and ignore TERM.
  // Keep the ownership fence until both the leader and its owned group are gone.
  const close=()=>{if(closing)return closing;closing=(async()=>{retire();if(!released){if(child&&exited){child.stdin.end();signal('SIGTERM');try{await waitForExit();}catch{signal('SIGKILL');await waitForExit();}}release();}if(cleanupFailed)fail('native_cleanup_unknown');})();const pending=closing;void pending.catch(()=>{if(closing===pending)closing=undefined;});return pending;};
