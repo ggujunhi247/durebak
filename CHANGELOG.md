@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.13 — 2026-10-04
+
+- Check exact OpenCode session status before submission; Durebak refuses another submission while busy/retry even after a terminal ledger result.
+- Distinguish configured model, connection presence, native readiness, unknown authentication and unverified entitlement without exposing provider configuration or retry messages.
+- Require matching running assistant evidence and native busy/retry state before spending a session-wide cancellation.
+- Installed OpenCode1.18.34 non-model readiness checks pass. Owned-host startup isolation, controller integration and actual heterogeneous model execution remain required gates.
+
 ## 0.1.0-alpha.12 — 2026-10-04
 
 - Add an internal private OpenCode intent/receipt ledger bound to a live owner, exact source and native session, with no automatic replay after response loss.

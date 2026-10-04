@@ -7,7 +7,7 @@ const optionsSchema=z.object({url:z.string(),password:z.string().min(32).max(200
 const nativeId=z.string().regex(/^ses_[A-Za-z0-9]+$/).max(200),messageId=z.string().regex(/^msg_[A-Za-z0-9]+$/).max(200);
 const nativeInput=z.object({nativeId}).strict();
 const submitInput=nativeInput.extend({messageId,providerId:short,modelId:short,text:z.string().min(1).refine(v=>Buffer.byteLength(v)<=16384)}).strict();
-type Operation='health'|'config'|'agents'|'skills'|'providers'|'sessions'|'createSession'|'session'|'messages'|'submit'|'abort';
+type Operation='health'|'config'|'agents'|'skills'|'providers'|'sessions'|'statuses'|'createSession'|'session'|'messages'|'submit'|'abort';
 interface Route {path:string;method:'GET'|'POST';body?:unknown;status:number}
 // Internal fixed-origin transport, not host ownership or execution authority.
 // In particular, a 204 receipt is not model success and failed POSTs are never replayed.
@@ -16,7 +16,7 @@ export class OpencodeHttp {
  constructor(raw:unknown){const parsed=optionsSchema.safeParse(raw);if(!parsed.success)fail('http_invalid_options');const options=parsed.data;let url:URL;try{url=new URL(options.url);}catch{fail('http_invalid_origin');}if(url.protocol!=='http:'||url.hostname!=='127.0.0.1'||!url.port||url.username||url.password||url.pathname!=='/'||url.search||url.hash)fail('http_invalid_origin');this.#origin=url.origin;try{this.#cwd=realpathSync.native(options.cwd);}catch{fail('http_invalid_options');}this.#authorization='Basic '+Buffer.from('opencode:'+options.password).toString('base64');this.#timeout=options.timeoutMs;this.#maxBytes=options.maxResponseBytes;this.#maxPending=options.maxPending;}
  get metadata(){return Object.freeze({origin:this.#origin,cwd:this.#cwd});}
  private route(operation:Operation,input:unknown):Route {
-  const plain:Partial<Record<Operation,string>>={health:'/global/health',config:'/config',agents:'/agent',skills:'/skill',providers:'/provider',sessions:'/session'};
+  const plain:Partial<Record<Operation,string>>={health:'/global/health',config:'/config',agents:'/agent',skills:'/skill',providers:'/provider',sessions:'/session',statuses:'/session/status'};
   if(Object.hasOwn(plain,operation)){z.object({}).strict().parse(input??{});return {path:plain[operation]!,method:'GET',status:200};}
   if(operation==='createSession'){const body=z.object({title:short}).strict().parse(input);return {path:'/session',method:'POST',body,status:200};}
   if(operation==='submit'){const data=submitInput.parse(input);return {path:`/session/${data.nativeId}/prompt_async`,method:'POST',status:204,body:{messageID:data.messageId,model:{providerID:data.providerId,modelID:data.modelId},agent:'build',parts:[{type:'text',text:data.text}]}};}
