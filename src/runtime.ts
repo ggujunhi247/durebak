@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { Store } from './store.js';
 import { DomainError, fail, sendSchema, taskSchema, type Session } from './domain.js';
 import { privateDirectory } from './database.js';
-import {requestCreateSchema,requestMessageSchema,requestTransitionSchema,checkpointSchema} from './requests.js';
+import {requestPayloadSchema,requestCreateSchema,requestMessageSchema,requestTransitionSchema,checkpointSchema} from './requests.js';
 
 const identifier = z.string().min(1).max(200);
 const page = z.object({ after: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(20).default(10) }).strict();
@@ -17,6 +17,8 @@ const source = z.object({ id: identifier, offset: z.number().int().min(0).defaul
 const taskVersion = z.object({ id: identifier, version: z.number().int().positive() }).strict();
 const empty = z.object({}).strict();
 export const operations = {
+  request_preview:z.object({request:requestPayloadSchema}).strict(),
+  request_preview_read:source,
   request_create:requestCreateSchema,
   request_get:z.object({id:identifier}).strict(),
   request_list:z.object({after:z.string().max(200).default(''),limit:z.number().int().min(1).max(20).default(10)}).strict(),
@@ -57,6 +59,8 @@ export type Operation = keyof typeof operations;
 function dispatch(store: Store, actor: Session, operation: Operation, input: unknown, epoch: string): unknown {
   // Each branch parses at the trust boundary before entering the store.
   switch (operation) {
+    case 'request_preview':return store.requestPreview(actor,operations.request_preview.parse(input).request);
+    case 'request_preview_read':{const a=source.parse(input);return store.requestPreviewRead(actor,a.id,a.offset,a.limit);}
     case 'request_create':return store.requestCreate(actor,requestCreateSchema.parse(input));
     case 'request_get':return store.requestGet(actor,operations.request_get.parse(input).id);
     case 'request_list':{const a=operations.request_list.parse(input);return store.requestList(actor,a.after,a.limit);}
@@ -67,7 +71,7 @@ function dispatch(store: Store, actor: Session, operation: Operation, input: unk
     case 'control_ack':return store.controlAck(actor,operations.control_ack.parse(input).cursor);
     case 'checkpoint_get':return store.checkpointGet(actor,operations.checkpoint_get.parse(input).consumer);
     case 'checkpoint_set':return store.checkpointSet(actor,checkpointSchema.parse(input));
-    case 'runtime_info': empty.parse(input); return { version, protocol_version: protocolVersion, schema_version: schemaVersion, session_id: actor.id, daemon_epoch: epoch, capabilities:['session_health_v1','request_threads_v1','request_controls_v1','consumer_checkpoints_v1'] };
+    case 'runtime_info': empty.parse(input); return { version, protocol_version: protocolVersion, schema_version: schemaVersion, session_id: actor.id, daemon_epoch: epoch, capabilities:['session_health_v1','request_threads_v1','request_controls_v1','consumer_checkpoints_v1','request_preview_v1'] };
     case 'session_health': {const a=operations.session_health.parse(input);return store.sessionHealth(actor,a.id??actor.id,epoch);}
     case 'bridge_touch': {const a=operations.bridge_touch.parse(input);if(a.epoch!==epoch)fail('daemon_epoch_mismatch');return store.bridgeTouch(actor,a.instance,epoch);}
     case 'bridge_close': {const a=operations.bridge_close.parse(input);if(a.epoch!==epoch)fail('daemon_epoch_mismatch');return store.bridgeClose(actor,a.instance,epoch);}
@@ -146,7 +150,7 @@ export async function startRuntime(directory: string) {
       const actor = store.authenticate(token);
       if (!actor) { respond(res, 401, { error: 'unauthorized' }); return; }
       const input = z.object({ operation: z.enum(Object.keys(operations) as [Operation, ...Operation[]]), args: z.unknown() }).strict().parse(body);
-      if (!['runtime_info','sessions','session_health','bridge_touch','bridge_close','events','request_get','request_list','request_messages','checkpoint_get'].includes(input.operation)) store.activityTouch(actor);
+      if (!['runtime_info','sessions','session_health','bridge_touch','bridge_close','events','request_get','request_list','request_messages','checkpoint_get','request_preview','request_preview_read'].includes(input.operation)) store.activityTouch(actor);
       respond(res, 200, dispatch(store, actor, input.operation, input.args, instance));
     } catch (error) {
       const code = error instanceof DomainError ? error.code : error instanceof z.ZodError ? 'invalid_input' : 'internal_error';

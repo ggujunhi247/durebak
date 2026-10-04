@@ -6,7 +6,8 @@ import {transaction} from './transactions.js';
 import {encodedPreview} from './content.js';
 import {queuePolicy} from './queue-policy.js';
 
-export const requestCreateSchema=sendSchema.omit({replyTo:true}).extend({deadlineMs:z.number().int().min(1).max(3600000).default(600000)}).strict();
+export const requestPayloadSchema=sendSchema.omit({replyTo:true}).extend({deadlineMs:z.number().int().min(1).max(3600000).default(600000)}).strict();
+export const requestCreateSchema=requestPayloadSchema.extend({previewId:short.optional()}).strict();
 export const requestMessageSchema=z.object({id:short,version:z.number().int().positive(),kind:z.enum(['answer','note','result']),body,key:short}).strict();
 export const checkpointSchema=z.object({consumer:short,version:z.number().int().min(0),messageCursor:z.number().int().min(0),controlCursor:z.number().int().min(0)}).strict();
 export interface Checkpoint {consumer:string;version:number;message_cursor:number;control_cursor:number}
@@ -17,7 +18,7 @@ export interface CollaborationRequest {id:string;workspace:string;creator:string
 interface StoredRequest extends CollaborationRequest {key:string;digest:string}
 const terminal=(state:RequestState)=>!['pending','accepted'].includes(state);
 export class RequestRepository {
- constructor(private db:DatabaseSync,private clock:{now():number},private enqueue:(actor:Session,input:z.input<typeof sendSchema>,now:number)=>Message){}
+ constructor(private db:DatabaseSync,private clock:{now():number},private enqueue:(actor:Session,input:z.input<typeof sendSchema>,now:number)=>Message,private validatePreview:(actor:Session,id:string,payload:z.output<typeof requestPayloadSchema>,now:number)=>void){}
  private one<T>(sql:string,...args:SQLInputValue[]){return this.db.prepare(sql).get(...args) as T|undefined;}
  private all<T>(sql:string,...args:SQLInputValue[]){return this.db.prepare(sql).all(...args) as T[];}
  private run(sql:string,...args:SQLInputValue[]){return this.db.prepare(sql).run(...args);}
@@ -44,13 +45,14 @@ export class RequestRepository {
  messageMetadata(id:string){return this.one<{request_id:string;kind:string}>('SELECT request_id,kind FROM request_messages WHERE message_id=?',id);}
  create(actor:Session,input:z.input<typeof requestCreateSchema>){
   if(Buffer.byteLength(JSON.stringify(actor.workspace))>4096)fail('request_scope_too_large');
-  const data=requestCreateSchema.parse(input);const digest=hash(JSON.stringify(data));this.expire();
+  const {previewId,...data}=requestCreateSchema.parse(input);const digest=hash(JSON.stringify(data));this.expire();
   return transaction(this.db,()=>{
    const old=this.one<StoredRequest>('SELECT * FROM requests WHERE creator=? AND key=?',actor.id,data.key);
    if(old){if(old.digest!==digest)fail('idempotency_conflict');return this.snapshot(old);}
    if(data.to===actor.id)fail('distinct_participants_required');
    if(this.one<{n:number}>("SELECT count(*) n FROM requests WHERE creator=? AND state IN ('pending','accepted')",actor.id)!.n>=100)fail('request_capacity_exceeded');
    const now=this.clock.now(),deadline=now+data.deadlineMs;
+   if(previewId)this.validatePreview(actor,previewId,data,now);
    if(now+Math.max(queuePolicy.delay_ms[data.priority],data.delayMs)>=deadline)fail('deadline_before_delivery');
    const id=randomUUID();
    const message=this.enqueue(actor,{to:data.to,body:data.body,key:`request:${id}:initial`,priority:data.priority,...(data.urgentReason?{urgentReason:data.urgentReason}:{}),delayMs:data.delayMs,ttlMs:data.ttlMs},now);

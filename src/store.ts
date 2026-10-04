@@ -6,7 +6,8 @@ import { bridgeHealth, type BridgeObservation, type SessionHealth } from './heal
 import { openDatabase } from './database.js';
 import { transaction } from './transactions.js';
 import { encodedPreview, preview, range } from './content.js';
-import { RequestRepository,requestCreateSchema,requestMessageSchema,checkpointSchema,type RequestState } from './requests.js';
+import {RequestPreviewRepository} from './request-preview.js';
+import { RequestRepository,requestPayloadSchema,requestCreateSchema,requestMessageSchema,checkpointSchema,type RequestState } from './requests.js';
 import { queuePolicy, retryDelay, canDeliver, deliveryRank } from './queue-policy.js';
 
 // Compatibility facade: CLI, HTTP, MCP and existing consumers keep their API.
@@ -19,9 +20,11 @@ export class Store {
   private readonly db: DatabaseSync;
   private closed = false;
   private readonly requests: RequestRepository;
+  private readonly previews: RequestPreviewRepository;
   constructor(readonly directory: string, private readonly clock = { now: () => Date.now() }) {
     this.db = openDatabase(directory);
-    this.requests=new RequestRepository(this.db,this.clock,(actor,input,now)=>this.enqueue(actor,input,now));
+    this.previews=new RequestPreviewRepository(this.db,this.clock);
+    this.requests=new RequestRepository(this.db,this.clock,(actor,input,now)=>this.enqueue(actor,input,now),(actor,id,payload,now)=>this.previews.validate(actor,id,payload,now));
   }
   close() { if (!this.closed) { this.db.close(); this.closed = true; } }
   private one<T>(sql: string, ...values: SQLInputValue[]): T | undefined { return this.db.prepare(sql).get(...values) as T | undefined; }
@@ -80,6 +83,8 @@ export class Store {
     return {session_id:id,bridge:bridgeHealth(rows.map(x=>({...x,closed:!!x.closed})),epoch,this.clock.now()),last_activity_at:activity?.last_activity_ms??null,availability:session.availability,host:'unknown',readiness:'unknown',progress:'unknown',auto_wake:false};
   }
   send(actor: Session, input: z.input<typeof sendSchema>): Message { return this.transaction(()=>this.enqueue(actor,input)); }
+  requestPreview(actor:Session,input:z.input<typeof requestPayloadSchema>){return this.previews.create(actor,input);}
+  requestPreviewRead(actor:Session,id:string,offset=0,limit=4096){return this.previews.read(actor,id,offset,limit);}
   requestCreate(actor:Session,input:z.input<typeof requestCreateSchema>){return this.requests.create(actor,input);}
   requestGet(actor:Session,id:string){return this.requests.get(actor,id);}
   requestList(actor:Session,after='',limit=10){return this.requests.list(actor,after,limit);}

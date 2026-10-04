@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-alpha.4 — 2026-10-04
+
+- Add private two-participant request conversations, fixed deadlines and versioned acceptance/result/termination.
+- Retain cancellation and timeout notices independently of inbox pressure or pause; notice acknowledgement does not assert host stopping.
+- Add session-scoped consumer checkpoints with monotonic observed cursors and compare-and-swap updates.
+- Add optional 60-second sender-only sharing previews, original-body range reads and send-time payload/permission checks.
+- Preserve existing credentials, messages and delivery cursors through additive schema4→5→6 migrations.
+- Regress deadline races, oversized pages, skipped unobserved notices and atomic storage failure rollback; test real HTTP/MCP routes.
+
+Protected request tasks/attachments, revision evidence and native automatic wake remain future work. Actual heterogeneous host execution is unverified.
+
 ## 0.1.0-alpha.3 — 2026-10-04
 
 - Add inactive harness research catalog and epoch-scoped MCP bridge health.
