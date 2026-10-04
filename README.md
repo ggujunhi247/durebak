@@ -6,7 +6,7 @@ Local, durable collaboration between coding-agent sessions. Experimental alpha f
 
 두레박은 같은 컴퓨터의 코딩 에이전트 세션이 메시지·작업·결과를 주고받는 로컬 협업 런타임입니다. 각 세션은 자기 호스트와 맥락을 유지하고, CLI 또는 MCP로 참여합니다.
 
-**현재 버전: 0.1.0-alpha.3, Cooperative 모드.** SQLite 저장소, 인증된 loopback 서버, CLI, MCP stdio bridge가 구현되어 있습니다. 실제 MCP 프로세스 간 통신을 테스트했으며, 호스트별 실제 시험 결과와 제약은 [호스트 테스트](docs/HOST-TESTING.md)에 기록합니다. 자동 세션 실행·깨우기와 반복 작업 스케줄러는 후속 기능입니다.
+**현재 소스: 0.1.0-alpha.5, Cooperative 모드.** SQLite 저장소, 인증된 loopback 서버, CLI, MCP stdio bridge가 구현되어 있습니다. 실제 MCP 프로세스 간 통신을 테스트했으며, 호스트별 실제 시험 결과와 제약은 [호스트 테스트](docs/HOST-TESTING.md)에 기록합니다. 요청별 대화·기한·취소 notice·checkpoint, 공유 preview, 보호 작업·비공개 텍스트 첨부, revision별 자기보고 검증·재검증과 CLI 협업 화면을 제공합니다. 자동 세션 실행·깨우기와 반복 작업 스케줄러는 후속 기능입니다.
 
 ## 시작하기
 
@@ -19,7 +19,7 @@ npx --yes durebak@alpha --help
 npx --yes durebak@alpha serve
 ```
 
-재현 가능한 설치에는 `durebak@0.1.0-alpha.3`처럼 정확한 버전을 지정하세요. npm 첫 게시가 `latest`도 이 실험 버전에 연결했으므로 버전 미지정 설치도 alpha.2를 선택합니다. 서버는 foreground에서 실행하며 Ctrl-C로 종료합니다.
+npm dist-tag와 현재 소스 버전은 다를 수 있습니다. `npm view durebak dist-tags`로 게시 버전을 확인하고 정확한 버전을 지정하세요. 새 후보의 npm 게시가 막힌 경우 [GitHub Releases](https://github.com/ggujunhi247/durebak/releases)의 검증된 `.tgz`와 `SHA256SUMS`를 확인해 `npm install --global ./durebak-VERSION.tgz`로 설치할 수 있습니다. 서버는 foreground에서 실행하며 Ctrl-C로 종료합니다.
 
 `git`에서 직접 실행하려면:
 
@@ -38,7 +38,8 @@ node dist/cli.js serve
 
 - 실제 Codex → Codex 요청·검토·결과 제출을 검증했습니다.
 - Claude Code·OpenCode 설정 어댑터와 6방향 시험 도구를 제공합니다. **이종 모델 간 실통신 성공은 아직 검증하지 못했습니다.**
-- 자동 테스트와 실제 MCP 프로세스 왕복 검사를 통과했습니다. [Linux·macOS 원격 CI](https://github.com/ggujunhi247/durebak/actions/runs/36610450906)에서도 테스트와 패키지 검사를 통과했습니다.
+- 자동 테스트와 실제 MCP 프로세스 왕복 검사를 통과했습니다. [Linux·macOS 원격 CI](https://github.com/ggujunhi247/durebak/actions)에서도 테스트와 패키지 검사를 통과했습니다.
+- `durebak dashboard --session FILE`에서 원문 없이 연락·요청·검증 상태를 확인합니다. bridge 접촉은 실제 host 준비 증거가 아닙니다.
 - 자동 세션 깨우기·네이티브 대화 재개·무인 반복 개선은 아직 지원하지 않습니다.
 
 자세한 버전과 제한은 [호환성](docs/COMPATIBILITY.md)을 확인하세요.
@@ -83,7 +84,7 @@ npm run lab
 
 ## 배포
 
-[Apache-2.0](LICENSE) 라이선스의 실험적 알파입니다. 소스 저장소는 [ggujunhi247/durebak](https://github.com/ggujunhi247/durebak)이며 **npm에는 아직 게시하지 않았습니다.** 현재는 위의 소스 설치 방법을 사용하세요. npm 배포 설정은 공개 `alpha` 채널용으로 준비되어 있습니다. 설정 준비와 실제 registry 게시는 별개이며, 게시 완료 전에는 위 소스 설치 방법을 사용하세요.
+[Apache-2.0](LICENSE) 라이선스의 실험적 알파입니다. 소스 저장소는 [ggujunhi247/durebak](https://github.com/ggujunhi247/durebak)입니다. npm에는 alpha.2가 게시되어 있고, alpha.3/alpha.4는 검증된 GitHub prerelease 파일로 전달했습니다. 현재 alpha.5 소스의 registry 게시 여부는 `npm view durebak dist-tags`로 별도 확인하세요. CI/CD는 검증된 동일 artifact를 protected npm environment와 trusted publisher를 통해 게시하도록 구성되어 있으며, 인증·게시권한 확인이 남으면 소스 또는 GitHub 배포 파일을 사용합니다.
 
 제품명은 **두레박**, 영문 브랜드와 CLI 식별자는 **Durebak / durebak**입니다.
 

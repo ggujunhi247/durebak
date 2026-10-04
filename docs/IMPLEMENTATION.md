@@ -1,4 +1,4 @@
-# 구현 현황 — 0.1.0-alpha.4
+# 구현 현황 — 0.1.0-alpha.5
 
 이 문서는 실행 가능한 범위를 설명한다. 전체 제품 스펙 v0.4는 목표 계약이며 이 alpha에서 모두 충족하지 않는다.
 
@@ -29,7 +29,7 @@
 - Provider prompt cache 제어·usage/cost 정규화·실제 비용 절감 측정.
 - 학습 후보 채택, 전문 검색/FTS, 자동 문서 색인·보존 기한 정리, artifact 삭제/tombstone.
 - 대형/바이너리 artifact, SSE push, 원격 호스트, 자동 호스트 설정 설치 및 플러그인 패키지.
-- request-private task·첨부, 공유 preview, revision evidence, 협업 화면은 후속 단계다. 기존 task/artifact는 기존 workspace 범위를 유지한다.
+- browser 협업 화면·watch 갱신은 후속 단계다. CLI 협업 화면과 보호 task·첨부·revision/evidence는 alpha.5 소스에 구현했다. 기존 공개 task/artifact의 workspace 범위는 유지한다.
 
 현재 task version은 작업 상태 revision이다. artifact hash는 내용 revision이며 자동 review gate와는 별개다. 세션 ID는 두레박 등록 ID이고 호스트 native session ID와 매핑하지 않는다. 세션별 MCP 설정을 유지할 수 없는 호스트에서는 동일 identity 공유를 방지하는 별도 연결 방식이 필요하다.
 
@@ -57,9 +57,9 @@ alpha.4 공유 미리보기: 발신자 전용 60초 preview와 원문 범위 조
 
 alpha.4 로컬 검증: 전체128개, 타입·57개 package allowlist·독립 설치 smoke·저장소·gitleaks 통과. 별도 reviewer가 preview의 Critical/Important 문제 없음 및42개 집중 시험 통과를 확인했다. CI·registry 게시 상태는 release 결과로 별도 확인한다.
 
-## 다음 단계 개발: request-linked 보호 작업
+## alpha.5: request-linked 보호 작업
 
-선택적인 새 task를 request와 원자적으로 생성하고 참여자 ACL·최초 전달 조건을 legacy task 목록/조회/record/events에도 적용한다. legacy mutation은 연결 요청 연산을 요구하며, request/task version을 함께 검사해 수락·결과·종료를 한 transaction에서 반영한다. 결과 hash는 현재 기존 workspace-visible artifact이며 request-private 첨부/revision은 후속이다. schema6→7은 mapping 표를 추가한다. 기존 alpha.4에는 포함되지 않은 개발 내용이다.
+선택적인 새 task를 request와 원자적으로 생성하고 참여자 ACL·최초 전달 조건을 legacy task 목록/조회/record/events에도 적용한다. legacy mutation은 연결 요청 연산을 요구하며, request/task version을 함께 검사해 수락·결과·종료를 한 transaction에서 반영한다. revision 없는 결과 hash는 기존 workspace-visible artifact이며 private 결과는 아래 schema9 revision 계약을 따른다. schema6→7은 mapping 표를 추가한다. 기존 alpha.4에는 포함되지 않은 개발 내용이다.
 
 2026-10-04 보호 작업 개발 검증: 전체139개·타입·59파일 패키지 allowlist·저장소112파일·gitleaks 통과. 독립 리뷰의 Critical/Important 문제 없음, 집중37개 통과. 실제HTTP/MCP 기준 조회/legacy mutation 차단/양쪽version 수락·완료, storage failure 원자성, 독립released schema6 fixture의 원래 request/preview/credential 보존을 확인했다. 아직 alpha.4 출시 파일에 포함되지 않는다.
 
@@ -67,14 +67,21 @@ alpha.4 로컬 검증: 전체128개, 타입·57개 package allowlist·독립 설
 
 2026-10-04 private 첨부 개발 검증: 전체151개·타입·61파일package allowlist·독립설치smoke·저장소114파일·gitleaks 통과. 독립review의종료late-result첨부누락1건을cancelled/timed_out 회귀로재현해명시거부로수정했다. 구preview NULLdigest호환·원자rollback·quota/barrier/redaction·HTTP/MCP handle ACL을검증했다. 아직alpha4태그/릴리스와분리된개발코드다.
 
-## 다음 단계 개발: revision과 재검증 근거
+## alpha.5: revision과 재검증 근거
 
 schema8→9에 불변 task revision·self_reported verification evidence와 완료 메시지 접근 경계를 추가한다. accepted recipient만 요청/작업 dual version으로 owner 전용 upload를 revision에 연결하고 정상 전달 note·비공개 handle·작업 version 증가를 한 transaction으로 처리한다. 최신 revision이 있는 완료 결과는 그 hash로 고정하며 결과 메시지가 전달되기 전 legacy task/record와 request summary에서 hash를 숨긴다. 기존 공개 artifact 결과는 revision 없는 보호 작업과 legacy task에서 유지한다.
 
 검증 보고는 정확한 revision/고정 기준 digest, 작성자, attempt와 연결한다. 같은 작성자의 동일 revision 이력만 supersede할 수 있다. 활성 실패는 통과보다 우선하고 충돌은 별도 표시한다. 이전 revision의 보고는 최신 결과 통과로 승격되지 않는다. procedure 원문은 bounded source API로 조회하며 참여자·revision 전달 ACL을 적용한다. 두레박이 실제 테스트 명령을 실행하는 runner는 포함하지 않는다.
 
-모델 호출 없는 bounded request_bundle은 원문 참조와 self_reported 출처를 제공하며 source_complete:false를 명시한다. Native Managed 자동 실행·실제 이종 Provider 검증·협업 UI는 별도 후속 단계다. 기존 alpha.4 release는 schema6이며 이 개발 내용을 포함하지 않는다.
+모델 호출 없는 bounded request_bundle은 원문 참조와 self_reported 출처를 제공하며 source_complete:false를 명시한다. Native Managed 자동 실행·실제 이종 Provider 검증·browser 협업 UI는 별도 후속 단계다. 기존 alpha.4 release는 schema6이며 이 개발 내용을 포함하지 않는다.
 
-## 다음 단계 개발: 협업 상태 snapshot
+## alpha.5: 협업 상태 snapshot
 
 `collaboration_status`와 `durebak dashboard`를 추가해 같은 workspace의 공개 세션 연락 metadata와 자신의 참여 요청 상태를 본문 없이 조회한다. 자기 건강·bridge duplicate·availability와 host unknown을 구분하고 completed와 self_reported 검증 상태를 분리한다. 세션20개/요청10개 pagination과 alias 잘림을 표시하며 터미널 제어/bidi 문자를 escape한다. 인증된 HTTP/MCP/CLI에 같은 계약을 적용하고 조회는 activity touch·receive·ACK·claim·native 실행을 하지 않는다. 브라우저 UI와 자동 갱신은 미포함이다.
+
+
+## alpha.5 릴리스 후보 검증
+
+최신 소스는 schema9, 보호 작업·private 첨부·첨부 preview·불변 결과 revision·self_reported evidence/재검증·bounded work bundle·one-shot CLI 협업 화면을 포함한다. 전체168개 테스트, 타입 검사,65파일 package allowlist·독립 설치 smoke·저장소·gitleaks와 PR21/22의 Linux/macOS CI를 통과했다. 독립 리뷰에서 revision3개/화면2개의 Important 문제를 각 RED→GREEN 후 수정하고 전체 회귀를 다시 실행했다. 이 문서의 alpha.3/alpha.4 및 schema7/8 단락은 단계별 검증 이력이며 과거 release 파일에 새 기능을 소급하지 않는다.
+
+npm registry 게시와 GitHub artifact 전달은 release workflow 결과로 각각 확인한다. 소스의 version 표시는 registry publish 성공을 뜻하지 않는다. 실제 Claude/OpenCode 이종 모델 왕복·native Managed wake·자동 검증 명령 실행은 이 테스트 결과에 포함되지 않는다.
