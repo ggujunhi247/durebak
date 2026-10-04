@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.12 — 2026-10-04
+
+- Add an internal private OpenCode intent/receipt ledger bound to a live owner, exact source and native session, with no automatic replay after response loss.
+- Distinguish HTTP acknowledgement from exact native input acceptance and preserve immutable bounded answer snapshots for the same live owner.
+- Preserve pending cancellation until a matching running assistant is observed; fence following input while a session-wide abort is in flight or its response is uncertain.
+- Validate 373 regression tests and installed OpenCode1.18.34 non-model ledger contact. Actual native model cancellation, heterogeneous model execution, controller integration and automatic wake remain unverified.
+
 ## 0.1.0-alpha.11 — 2026-10-04
 
 - Add internal OpenCode outcome observation bound to exact session, parent message and selected model; provider errors, ambiguous replies and tool-bearing candidates cannot be reported as successful answers.
