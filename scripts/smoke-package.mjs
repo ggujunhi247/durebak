@@ -21,6 +21,10 @@ try {
   const cli=join(install,'node_modules',manifest.name,'dist','cli.js');
   const command=(...args)=>exec(process.execPath,[cli,...args],{timeout:15000});
   assert.equal((await command('--version')).stdout.trim(),manifest.version);
+  const skillProject=join(directory,'skill-project');mkdirSync(skillProject);
+  const skills=JSON.parse((await command('skills','--harness','all','--workspace',skillProject)).stdout);assert.equal(skills.created.length,5);assert.equal(skills.auto_wake,false);
+  assert.ok(readFileSync(join(skillProject,'.agents/skills/durebak/SKILL.md'),'utf8').startsWith('---\nname: durebak\n'));
+  assert.deepEqual(JSON.parse((await command('skills','--harness','all','--workspace',skillProject)).stdout).created,[]);
   const data=join(directory,'data');
   daemon=spawn(process.execPath,[cli,'serve','--data-dir',data],{stdio:['ignore','ignore','pipe']});
   await new Promise((resolve,reject)=>{
@@ -37,7 +41,7 @@ try {
   await new Promise(resolve=>setTimeout(resolve,5100));
   const inbox=JSON.parse((await command('call','receive','--session',file)).stdout);
   assert.equal(inbox.items[0].body,'Installed package works');
-  console.log(JSON.stringify({status:'passed',...artifact,checks:['version','daemon','registration','doctor','setup','send','receive']}));
+  console.log(JSON.stringify({status:'passed',...artifact,checks:['version','skills','daemon','registration','doctor','setup','send','receive']}));
 } finally {
   if(daemon && daemon.exitCode===null && daemon.signalCode===null){const exited=once(daemon,'exit');daemon.kill('SIGTERM');await exited;}
   rmSync(directory,{recursive:true,force:true});

@@ -97,3 +97,13 @@ alpha.5 immutable release는 schema9입니다. 이후 개발 소스는 관리자
 내부 WorkInput은 명시적 대상 메시지까지의 request-prefix를 snapshot transaction으로 수집한다. 원문 메시지·작업 기준·private 첨부·prefix revision 이력·관련 self_reported evidence·revision 없는 공개 결과 원문을 포함하고 누락/손상/16KiB 초과를 거부한다. 이후 메시지는 이 범위 밖이며 새로운 revision이 이미 생성되어 현재 trigger의 범위와 충돌하면 거부한다. 전달 예정 prefix의 note는 결과와 함께 준비할 수 있지만 note 자체는 실행 trigger가 아니다. snapshot은 전달/읽음/수락이나 activity를 변경하지 않는다.
 
 이 모듈은 공개 session API나 native driver가 아니다. prepare와 예약을 구분하며, 후속 controller는 같은 lock에서 pending_delivery_ids 전체의 경쟁·policy/owner epoch·shared budget·source digest를 재검증하고 durable attempt를 저장해야 한다. 실제 delivery receipt는 실행 입력을 받은 시점과 연결해야 하며 preparation 성공을 모델 실행/접수/완료 근거로 사용할 수 없다. 독립 리뷰에서 공개 결과 원문 및 이전 revision evidence 누락2건을 발견하고 실패 테스트 후 수정했다. 추가로 queued revision note가 결과 continuation을 막는 경우를 회귀 테스트로 확인하고 prefix delivery-intent source에 포함했다.
+
+## schema10 개발: 협업 스킬·커맨드
+
+`durebak skills --harness codex|claude-code|opencode|all --workspace PROJECT`는 프로젝트별 공통 협업 스킬과 도구별 호출 진입점를 설치한다. 공통 원문은 compiled module에 포함되므로 npm allowlist를 확대하지 않는다. Credential·runtime path·실제 대화는 생성 파일에 들어가지 않는다. 별도의 MCP 연결/세션 등록이 필요하며 installer 자체는 모델/호스트를 호출하지 않는다.
+
+독립 behavioral baseline은 실제 API 형식을 알 수 없어 수락/응답을 구체화하지 못했다. 생성 스킬과 reference를 받은 독립 forward exercise는 full-source 읽기·현재 request/task version 수락·answer 응답·관계없는 cancel 구분·이전 revision evidence의 불확실성 유지 절차를 선택했다. 이는 실제 Claude/Codex/OpenCode 모델 실행의 검증이 아니다. 초기 연결 command를 reference에 추가해 발견된 onboarding 공백을 보강했다.
+
+독립 코드 리뷰의 Important1건(부분 write 실패가 broken SKILL을 남겨 재설치 충돌)도 실패 회귀로 재현 후 exclusive open 직후 소유 파일을 추적하도록 수정했다. 동시 작성자의 EEXIST 파일은 보존한다. 실제 CLI installer와 도구별 생성 MCP config의 command/args로3개 독립 stdio bridge를 연결해 등록 provider codex/claude/opencode identity 사이6방향 private request·preview·수락·상관 result를 교환했다. 이 결과는 CLI/HTTP/MCP 프로토콜 검증이며 native discovery/모델 왕복 근거는 아래 별도 probe 범위와 구분한다.
+
+2026-10-04 별도 installed Codex0.146.0 discovery probe: 임시 독립 CODEX_HOME에서 app-server initialize→initialized→skills/list(forceReload)만 호출해 프로젝트의 `.agents/skills/durebak/SKILL.md`가 단일 enabled skill로 발견됨을 확인했다. Credential을 복사하지 않았고 thread/model turn 생성은0회이며 기존 활성 session을 resume하지 않았다. 이는 해당 CLI의 비모델 skill discovery 근거다. Claude/OpenCode discovery 및 실제 native 모델 협업·identity isolation·자동깨우기는 여전히 미검증이다. [공식 app-server skills 계약](https://developers.openai.com/codex/app-server/)과 설치된 CLI generated schema에 근거했으며 installer의 native_host_verified:false는 전체 호스트 협업 검증을 대신하지 않는다는 뜻이다.
