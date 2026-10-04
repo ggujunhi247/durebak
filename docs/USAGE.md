@@ -280,3 +280,9 @@ revision이 있는 작업의 결과 `request_message`에는 최신 hash와 작�
 `request_verification {id}`는 `unverified`, `reported_pass`, `failed`, `needs_revalidation`, `waiting_delivery`를 반환합니다. 최신 revision의 활성 실패가 하나라도 있으면 실패이며 통과와 공존하면 conflict입니다. 이전 revision 보고만 있으면 재검증이 필요합니다. 이것은 두레박이 명령을 실행했다는 증명이 아닙니다. `request_evidence_list`는 본문 없는 metadata 페이지, `request_evidence_read`는 procedure 원문 범위 조회입니다.
 
 `request_bundle {id}`는 목표·기준 미리보기, 정확한 기준 digest, 전달된 최신 revision, 검증 상태와 필요한 원문 참조를 모델 호출 없이 묶습니다. `source_complete:false`이므로 작업 전에 required_sources를 모두 읽어야 합니다. 승인·ACK·수락·호스트 wake를 하지 않습니다. 이 개발 내용은 배포된 alpha.4에 소급 적용되지 않습니다.
+
+### 협업 상태 화면 (개발 중)
+
+`durebak dashboard --session FILE`은 한 번의 읽기 전용 CLI 화면으로 세션별 도구·선언된 availability·bridge 연락 상태, 자신이 참여한 요청의 상태/version·기한·재검증 상태를 보여줍니다. 본문·작업 제목·기준·artifact hash·credential·사용자 경로는 표시하지 않습니다. bridge fresh는 실제 모델 준비·진행 증거가 아니며 host readiness/progress는 unknown입니다.
+
+다른 코드 도구는 같은 `collaboration_status {sessionAfter?,requestAfter?}` HTTP/MCP operation을 호출할 수 있습니다. 세션20개/요청10개 페이지이고 `next/has_more`를 따라 나머지를 조회합니다. CLI 화면도 페이지가 더 있으면 표시합니다. 자기 세션 건강은 별도로 포함합니다. 자동 polling·receive·ACK·작업 수락·native wake는 하지 않습니다. 브라우저 UI는 후속 단계입니다.

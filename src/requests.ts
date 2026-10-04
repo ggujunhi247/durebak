@@ -45,7 +45,7 @@ export class RequestRepository {
   // Preserve an active delivery receipt for ack, but never requeue a closed request.
   this.run("UPDATE messages SET status='expired',lease_until=NULL WHERE (status='queued' OR (status='in_flight' AND lease_until<=?)) AND id IN (SELECT rm.message_id FROM request_messages rm JOIN requests r ON r.id=rm.request_id WHERE r.state IN ('cancelled','timed_out','rejected','failed'))",now);
  }
- expire(){transaction(this.db,()=>this.expireWithinTransaction());}
+ expire(now=this.clock.now()){transaction(this.db,()=>this.expireWithinTransaction(now));}
  messageMetadata(id:string){return this.one<{request_id:string;kind:string}>('SELECT request_id,kind FROM request_messages WHERE message_id=?',id);}
  create(actor:Session,input:z.input<typeof requestCreateSchema>){
   if(Buffer.byteLength(JSON.stringify(actor.workspace))>4096)fail('request_scope_too_large');
@@ -69,9 +69,9 @@ export class RequestRepository {
  }
  attachmentList(actor:Session,id:string,after=0,limit=10){this.get(actor,id);return this.attachments.list(actor,this.visible(actor,id),after,limit);}
  taskRead(actor:Session,id:string,offset=0,limit=4096){this.get(actor,id);return this.tasks.read(actor,this.visible(actor,id),offset,limit);}
- get(actor:Session,id:string){short.parse(id);this.expire();return this.snapshot(this.visible(actor,id),actor);}
- list(actor:Session,after='',limit=10){
-  z.string().max(200).parse(after);z.number().int().min(1).max(20).parse(limit);this.expire();
+ get(actor:Session,id:string,now=this.clock.now()){short.parse(id);if(this.db.isTransaction)this.expireWithinTransaction(now);else this.expire(now);return this.snapshot(this.visible(actor,id),actor);}
+ list(actor:Session,after='',limit=10,now=this.clock.now()){
+  z.string().max(200).parse(after);z.number().int().min(1).max(20).parse(limit);if(this.db.isTransaction)this.expireWithinTransaction(now);else this.expire(now);
   const rows=this.all<StoredRequest>('SELECT * FROM requests WHERE workspace=? AND (creator=? OR recipient=?) AND id>? ORDER BY id LIMIT ?',actor.workspace,actor.id,actor.id,after,limit+1);
   const items=rows.slice(0,limit).map(q=>this.snapshot(q,actor));
   while(items.length>1&&Buffer.byteLength(JSON.stringify(items))>12000)items.pop();

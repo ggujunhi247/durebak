@@ -72,4 +72,7 @@ test('HTTP and real MCP share request ACL, delivery, completion and recovery che
  await assert.rejects(http(c.token,'request_verification',{id:reviewRequest.id}),/not_found/);
  assert((await call('runtime_info',{})).capabilities.includes('revision_verification_v1'));
 
+ const dashboard=await call('collaboration_status',{});assert.equal(dashboard.mode,'cooperative');assert.ok(dashboard.requests.items.some((row:{id:string})=>row.id===reviewRequest.id));assert.ok(!JSON.stringify(dashboard).includes('private revision source'));
+ const {promisify}=await import('node:util'),{execFile}=await import('node:child_process');const cli=await promisify(execFile)(process.execPath,[resolve('dist/cli.js'),'dashboard','--session',file],{timeout:10000});assert.ok(cli.stdout.includes('mode=cooperative'));assert.ok(cli.stdout.includes('host=unknown'));assert.ok(!cli.stdout.includes('private revision source'));
+
 });

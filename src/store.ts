@@ -7,6 +7,7 @@ import { openDatabase } from './database.js';
 import { transaction } from './transactions.js';
 import { encodedPreview, preview, range } from './content.js';
 import {ScopedAttachments,attachmentPutSchema} from './scoped-attachments.js';
+import type {CollaborationStatus} from './collaboration-status.js';
 import {Verification,revisionSchema,evidenceSchema} from './verification.js';
 import {ProtectedTasks} from './protected-tasks.js';
 import {RequestPreviewRepository} from './request-preview.js';
@@ -32,7 +33,7 @@ export class Store {
     this.attachments=new ScopedAttachments(this.db);
     this.protectedTasks=new ProtectedTasks(this.db);
     this.previews=new RequestPreviewRepository(this.db,this.clock,this.attachments);
-    this.verification=new Verification(this.db,this.clock,(actor,id)=>this.requests.get(actor,id));
+    this.verification=new Verification(this.db,this.clock,(actor,id,now)=>this.requests.get(actor,id,now));
     this.requests=new RequestRepository(this.db,this.clock,(actor,input,now)=>this.enqueue(actor,input,now),(actor,id,payload,now)=>this.previews.validate(actor,id,payload,now),this.protectedTasks,this.attachments);
   }
   close() { if (!this.closed) { this.db.close(); this.closed = true; } }
@@ -84,12 +85,21 @@ export class Store {
   activityTouch(actor: Session): void {
     this.run('INSERT INTO session_activity(session_id,last_activity_ms) VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET last_activity_ms=excluded.last_activity_ms',actor.id,this.clock.now());
   }
-  sessionHealth(actor: Session,id: string,epoch: string): SessionHealth {
+  sessionHealth(actor: Session,id: string,epoch: string,now=this.clock.now()): SessionHealth {
     const session=this.one<{availability:SessionHealth['availability']}>('SELECT availability FROM sessions WHERE id=? AND workspace=? AND revoked=0',id,actor.workspace);
     if(!session)fail('not_found');
     const rows=this.all<Omit<BridgeObservation,'closed'>&{closed:number}>('SELECT instance,epoch,last_seen_ms,closed FROM bridge_observations WHERE session_id=?',id);
     const activity=this.one<{last_activity_ms:number}>('SELECT last_activity_ms FROM session_activity WHERE session_id=?',id);
-    return {session_id:id,bridge:bridgeHealth(rows.map(x=>({...x,closed:!!x.closed})),epoch,this.clock.now()),last_activity_at:activity?.last_activity_ms??null,availability:session.availability,host:'unknown',readiness:'unknown',progress:'unknown',auto_wake:false};
+    return {session_id:id,bridge:bridgeHealth(rows.map(x=>({...x,closed:!!x.closed})),epoch,now),last_activity_at:activity?.last_activity_ms??null,availability:session.availability,host:'unknown',readiness:'unknown',progress:'unknown',auto_wake:false};
+  }
+  collaborationStatus(actor:Session,epoch:string,input:{sessionAfter?:string;requestAfter?:string}={}):CollaborationStatus {
+    const data=z.object({sessionAfter:z.string().max(200).default(''),requestAfter:z.string().max(200).default('')}).strict().parse(input);
+    return this.transaction(()=>{
+    const now=this.clock.now(),sessions=this.sessions(actor,data.sessionAfter,20),requests=this.requests.list(actor,data.requestAfter,10,now);
+    return {mode:'cooperative',auto_wake:false,observed_at:now,self:this.sessionHealth(actor,actor.id,epoch,now),
+      sessions:{...sessions,items:sessions.items.map(s=>{const health=this.sessionHealth(actor,s.id,epoch,now),alias=encodedPreview(s.alias,100);return {id:s.id,alias,alias_truncated:alias!==s.alias,provider:s.provider,availability:health.availability,bridge:health.bridge.state,duplicate_bridge:health.bridge.duplicate,last_contact_at:health.bridge.last_seen_at};})},
+      requests:{...requests,items:requests.items.map(q=>{const verification=this.verification.status(actor,q.id,now);return {id:q.id,state:q.state,version:q.version,creator:q.creator,recipient:q.recipient,deadline_at:q.deadline_at,task_state:q.task?.state??null,task_version:q.task?.version??null,verification:verification.status,needs_attention:verification.needs_attention};})}};
+    });
   }
   send(actor: Session, input: z.input<typeof sendSchema>): Message { return this.transaction(()=>this.enqueue(actor,input)); }
   attachmentPut(actor:Session,input:z.input<typeof attachmentPutSchema>){return this.attachments.put(actor,input);}

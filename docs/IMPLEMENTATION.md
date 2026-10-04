@@ -74,3 +74,7 @@ schema8→9에 불변 task revision·self_reported verification evidence와 완�
 검증 보고는 정확한 revision/고정 기준 digest, 작성자, attempt와 연결한다. 같은 작성자의 동일 revision 이력만 supersede할 수 있다. 활성 실패는 통과보다 우선하고 충돌은 별도 표시한다. 이전 revision의 보고는 최신 결과 통과로 승격되지 않는다. procedure 원문은 bounded source API로 조회하며 참여자·revision 전달 ACL을 적용한다. 두레박이 실제 테스트 명령을 실행하는 runner는 포함하지 않는다.
 
 모델 호출 없는 bounded request_bundle은 원문 참조와 self_reported 출처를 제공하며 source_complete:false를 명시한다. Native Managed 자동 실행·실제 이종 Provider 검증·협업 UI는 별도 후속 단계다. 기존 alpha.4 release는 schema6이며 이 개발 내용을 포함하지 않는다.
+
+## 다음 단계 개발: 협업 상태 snapshot
+
+`collaboration_status`와 `durebak dashboard`를 추가해 같은 workspace의 공개 세션 연락 metadata와 자신의 참여 요청 상태를 본문 없이 조회한다. 자기 건강·bridge duplicate·availability와 host unknown을 구분하고 completed와 self_reported 검증 상태를 분리한다. 세션20개/요청10개 pagination과 alias 잘림을 표시하며 터미널 제어/bidi 문자를 escape한다. 인증된 HTTP/MCP/CLI에 같은 계약을 적용하고 조회는 activity touch·receive·ACK·claim·native 실행을 하지 않는다. 브라우저 UI와 자동 갱신은 미포함이다.

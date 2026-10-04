@@ -10,7 +10,7 @@ export const evidenceSchema=z.object({id:short,revisionId:short,procedure:z.stri
 export interface Revision {cursor:number;id:string;request_id:string;task_id:string;handle_id:string;message_id:string;hash:string;criteria_digest:string;author:string;created_ms:number;task_version:number}
 export interface Evidence {cursor:number;id:string;request_id:string;revision_id:string;author:string;attempt:string;procedure:string;result:'pass'|'fail';started_at:number;ended_at:number;supersedes:string|null;created_ms:number}
 export class Verification {
- constructor(private db:DatabaseSync,private clock:{now():number},private get:(actor:Session,id:string)=>CollaborationRequest){}
+ constructor(private db:DatabaseSync,private clock:{now():number},private get:(actor:Session,id:string,now?:number)=>CollaborationRequest){}
  private revisions(id:string){return this.db.prepare('SELECT cursor,id,request_id,task_id,handle_id,message_id,hash,criteria_digest,author,created_ms,task_version FROM task_revisions WHERE request_id=? ORDER BY cursor').all(id) as unknown as Revision[];}
  private visible(actor:Session,r:Revision){return r.author===actor.id||!!this.db.prepare('SELECT id FROM messages WHERE id=? AND delivered_at IS NOT NULL').get(r.message_id);}
  private evidenceRows(id:string){return this.db.prepare('SELECT cursor,id,request_id,revision_id,author,attempt,procedure,result,started_at,ended_at,supersedes,created_ms FROM verification_evidence WHERE request_id=? ORDER BY cursor').all(id) as unknown as Evidence[];}
@@ -62,8 +62,8 @@ export class Verification {
    warnings:['peer_content_untrusted','self_reported_evidence','full_sources_required',...(!delivered||verification.status==='waiting_delivery'?['waiting_delivery']:[])],
    next_action:verification.status==='waiting_delivery'?'receive_at_safe_point':verification.status==='needs_revalidation'?'verify_latest_revision':verification.status==='failed'?'resolve_active_failures':'read_required_sources'};
  }
- status(actor:Session,id:string){
-  this.get(actor,id);const revisions=this.revisions(id),head=revisions.at(-1),source='self_reported' as const;
+ status(actor:Session,id:string,now?:number){
+  this.get(actor,id,now);const revisions=this.revisions(id),head=revisions.at(-1),source='self_reported' as const;
   if(head&&!this.visible(actor,head))return {status:'waiting_delivery',source,conflict:false,needs_attention:true,revision:null};
   const rows=this.evidenceRows(id).filter(e=>revisions.some(r=>r.id===e.revision_id&&this.visible(actor,r))),superseded=new Set(rows.map(e=>e.supersedes)),active=rows.filter(e=>!superseded.has(e.id)&&e.revision_id===head?.id),passes=active.filter(e=>e.result==='pass'),failures=active.filter(e=>e.result==='fail');
   const status=failures.length?'failed':passes.length?'reported_pass':rows.length?'needs_revalidation':'unverified';

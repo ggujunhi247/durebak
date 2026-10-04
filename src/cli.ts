@@ -12,6 +12,7 @@ import { credential, adminCall, dataDirectory, sessionCall } from './client.js';
 import { DomainError, fail, hash } from './domain.js';
 import { startRuntime, operations, type Operation } from './runtime.js';
 import { serveMcp } from './mcp.js';
+import {renderCollaborationStatus,type CollaborationStatus} from './collaboration-status.js';
 import { exportRecord } from './records.js';
 import { storagePaths, managedCredentialPath, managedRecordPath } from './paths.js';
 
@@ -24,6 +25,7 @@ const help = `Durebak ${version} — local cooperative session bus
   durebak mcp --session FILE                      Start session-scoped MCP stdio bridge
   durebak call OPERATION --session FILE [--json JSON | --input FILE]
   durebak setup --harness codex|claude-code|opencode --session FILE --out FILE
+  durebak dashboard --session FILE              Show one read-only cooperation snapshot
   durebak doctor --session FILE                 Check identity and runtime compatibility
   durebak export TASK_ID --session FILE [--out FILE]
   durebak paths [--session FILE | --data-dir PATH] Show local storage paths
@@ -75,9 +77,10 @@ async function main() {
     return;
   }
   if (command === 'revoke') { output(await adminCall(selectedDirectory(),'/v1/revoke',{ id:required(positionals[1],'session_id') })); return; }
-  if (!['setup','doctor','mcp','call','export'].includes(command)) fail('unknown_command');
+  if (!['dashboard','setup','doctor','mcp','call','export'].includes(command)) fail('unknown_command');
   const file = required(values.session ?? process.env.DUREBAK_SESSION_FILE, 'session');
   if (command === 'setup') { output(createSetup(resolveHarness(values.harness,values.host),file,required(values.out,'out'))); return; }
+  if (command === 'dashboard') {process.stdout.write(renderCollaborationStatus(await sessionCall(file,'collaboration_status',{}) as CollaborationStatus));return;}
   if (command === 'doctor') { const result = await doctor(file); output(result); if (!result.ok) process.exitCode=1; return; }
   if (command === 'mcp') { await serveMcp(file); return; }
   if (command === 'call') {

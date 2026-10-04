@@ -37,6 +37,7 @@ const descriptions: Record<PublicOperation,string> = {
   control_ack:'Confirm an observed control notice. host_stopped remains unknown.',
   checkpoint_get:'Read your consumer checkpoint without acknowledging messages, accepting work, or starting a host turn.',
   checkpoint_set:'Advance your consumer checkpoint using expected version and observed delivery/control cursors. This is recovery bookkeeping, not a message acknowledgement.',
+  collaboration_status:'Read a bounded body-free cooperative dashboard: workspace session contact and only your participant request/verification states. Contact is not host readiness. Follow next-page cursors. No receive, acknowledgement or automatic execution.',
   session_health: 'Read observed bridge contact and declared availability; does not verify host readiness or wake sessions.',
   runtime_info: 'Read authenticated runtime compatibility and your session identity; no secrets or local paths.',
   sessions:'Discover cooperative sessions in your workspace. Sessions are not automatically awakened.',
