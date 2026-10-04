@@ -82,7 +82,7 @@ schema8→9에 불변 task revision·self_reported verification evidence와 완�
 
 ## alpha.5 릴리스 후보 검증
 
-최신 소스는 schema9, 보호 작업·private 첨부·첨부 preview·불변 결과 revision·self_reported evidence/재검증·bounded work bundle·one-shot CLI 협업 화면을 포함한다. 전체168개 테스트, 타입 검사,65파일 package allowlist·독립 설치 smoke·저장소·gitleaks와 PR21/22의 Linux/macOS CI를 통과했다. 독립 리뷰에서 revision3개/화면2개의 Important 문제를 각 RED→GREEN 후 수정하고 전체 회귀를 다시 실행했다. 이 문서의 alpha.3/alpha.4 및 schema7/8 단락은 단계별 검증 이력이며 과거 release 파일에 새 기능을 소급하지 않는다.
+immutable alpha.5 소스는 schema9, 보호 작업·private 첨부·첨부 preview·불변 결과 revision·self_reported evidence/재검증·bounded work bundle·one-shot CLI 협업 화면을 포함한다. 전체168개 테스트, 타입 검사,65파일 package allowlist·독립 설치 smoke·저장소·gitleaks와 PR21/22의 Linux/macOS CI를 통과했다. 독립 리뷰에서 revision3개/화면2개의 Important 문제를 각 RED→GREEN 후 수정하고 전체 회귀를 다시 실행했다. 이 문서의 alpha.3/alpha.4 및 schema7/8 단락은 단계별 검증 이력이며 과거 release 파일에 새 기능을 소급하지 않는다.
 
 npm registry 게시와 GitHub artifact 전달은 release workflow 결과로 각각 확인한다. 소스의 version 표시는 registry publish 성공을 뜻하지 않는다. 실제 Claude/OpenCode 이종 모델 왕복·native Managed wake·자동 검증 명령 실행은 이 테스트 결과에 포함되지 않는다.
 
@@ -91,3 +91,9 @@ npm registry 게시와 GitHub artifact 전달은 release workflow 결과로 각�
 alpha.5 immutable release는 schema9입니다. 이후 개발 소스는 관리자 전용 native binding·on/off grant·owner renewal·자기 설정 조회를 추가합니다. 기본 off이며 세션/peer는 grant를 생성하거나 변경할 수 없습니다. runtime-local 선언 profile/native ID 유일성, owner credential 1회 발급과 비공개0600 파일, version/epoch CAS, durable scope·사용량 보존, clock high-water와 만료 latch를 검증합니다. 실제 identity 검증·machine-wide fencing·wake selection·예약·driver·model turn은 아직 구현 범위가 아닙니다. `auto_wake:false`, readiness unverified, stop unknown을 유지합니다.
 
 독립 리뷰에서 만료 관측 후 clock rollback에 의한 grant 부활과 off-state TTL 소실을 발견했습니다. 3개 재현 테스트가 실패하는 것을 확인한 뒤 durable observation/TTL 저장으로 수정했습니다. schema1–9 migration은 변경하지 않고 독립 released schema9 fixture의 credential/request 보존을 확인합니다.
+
+## schema10 개발: 실행 입력 준비
+
+내부 WorkInput은 명시적 대상 메시지까지의 request-prefix를 snapshot transaction으로 수집한다. 원문 메시지·작업 기준·private 첨부·prefix revision 이력·관련 self_reported evidence·revision 없는 공개 결과 원문을 포함하고 누락/손상/16KiB 초과를 거부한다. 이후 메시지는 이 범위 밖이며 새로운 revision이 이미 생성되어 현재 trigger의 범위와 충돌하면 거부한다. 전달 예정 prefix의 note는 결과와 함께 준비할 수 있지만 note 자체는 실행 trigger가 아니다. snapshot은 전달/읽음/수락이나 activity를 변경하지 않는다.
+
+이 모듈은 공개 session API나 native driver가 아니다. prepare와 예약을 구분하며, 후속 controller는 같은 lock에서 pending_delivery_ids 전체의 경쟁·policy/owner epoch·shared budget·source digest를 재검증하고 durable attempt를 저장해야 한다. 실제 delivery receipt는 실행 입력을 받은 시점과 연결해야 하며 preparation 성공을 모델 실행/접수/완료 근거로 사용할 수 없다. 독립 리뷰에서 공개 결과 원문 및 이전 revision evidence 누락2건을 발견하고 실패 테스트 후 수정했다. 추가로 queued revision note가 결과 continuation을 막는 경우를 회귀 테스트로 확인하고 prefix delivery-intent source에 포함했다.
