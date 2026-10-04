@@ -5,10 +5,11 @@ import {requestPayloadSchema} from './requests.js';
 import {fail,hash,short,type Session} from './domain.js';
 import {transaction} from './transactions.js';
 import {encodedPreview,range} from './content.js';
+import {ScopedAttachments} from './scoped-attachments.js';
 import {queuePolicy} from './queue-policy.js';
-interface PreviewRow {id:string;owner:string;payload:string;digest:string;created_ms:number;expires_at:number}
+interface PreviewRow {id:string;owner:string;payload:string;digest:string;created_ms:number;expires_at:number;attachment_digest:string|null}
 export class RequestPreviewRepository {
- constructor(private db:DatabaseSync,private clock:{now():number}){}
+ constructor(private db:DatabaseSync,private clock:{now():number},private attachments:ScopedAttachments){}
  private visible(actor:Session,id:string){
   short.parse(id);
   const row=this.db.prepare('SELECT * FROM request_previews WHERE id=? AND owner=?').get(id,actor.id) as PreviewRow|undefined;
@@ -18,6 +19,9 @@ export class RequestPreviewRepository {
  validate(actor:Session,id:string,payload:z.output<typeof requestPayloadSchema>,now:number){
   const row=this.visible(actor,id);this.valid(row,now);
   if(row.digest!==hash(JSON.stringify(payload)))fail('preview_conflict');
+  const manifest=this.attachments.manifest(actor,payload.uploads);
+  if(row.attachment_digest!==null&&row.attachment_digest!==hash(JSON.stringify(manifest)))fail('preview_conflict');
+  if(row.attachment_digest===null&&manifest.length)fail('preview_conflict');
  }
  create(actor:Session,input:z.input<typeof requestPayloadSchema>){
   const data=requestPayloadSchema.parse(input);
@@ -34,11 +38,12 @@ export class RequestPreviewRepository {
    this.db.prepare('DELETE FROM request_previews WHERE owner=? AND expires_at<=?').run(actor.id,now);
    if((this.db.prepare('SELECT count(*) n FROM request_previews WHERE owner=?').get(actor.id) as {n:number}).n>=20)fail('preview_capacity_exceeded');
    const id=randomUUID(),payload=JSON.stringify(data),digest=hash(payload),expires_at=now+60000;
-   this.db.prepare('INSERT INTO request_previews VALUES(?,?,?,?,?,?)').run(id,actor.id,payload,digest,now,expires_at);
+   const attachmentDigest=hash(JSON.stringify(this.attachments.manifest(actor,data.uploads)));
+   this.db.prepare('INSERT INTO request_previews(id,owner,payload,digest,created_ms,expires_at,attachment_digest) VALUES(?,?,?,?,?,?,?)').run(id,actor.id,payload,digest,now,expires_at,attachmentDigest);
    const warnings=['host_readiness_unknown'];
    if(recipient.availability!=='available')warnings.push(`recipient_${recipient.availability}`);
    if((this.db.prepare("SELECT count(*) n FROM messages WHERE recipient=? AND status IN ('queued','in_flight')").get(data.to) as {n:number}).n>=queuePolicy.capacity)warnings.push('inbox_full');
-   return {id,digest,sender:actor.id,recipient:data.to,visibility:'request-private' as const,body:encodedPreview(data.body,400),body_bytes:Buffer.byteLength(data.body),truncated:data.body!==encodedPreview(data.body,400),expires_at,due_at:due,deadline_at:now+data.deadlineMs,timing:'tentative_until_send' as const,warnings,...(data.task?{task:{title:data.task.title,criteria:encodedPreview(data.task.criteria,400),criteria_bytes:Buffer.byteLength(data.task.criteria),truncated:data.task.criteria!==encodedPreview(data.task.criteria,400)}}:{})};
+   return {id,digest,sender:actor.id,recipient:data.to,visibility:'request-private' as const,body:encodedPreview(data.body,400),body_bytes:Buffer.byteLength(data.body),truncated:data.body!==encodedPreview(data.body,400),expires_at,due_at:due,deadline_at:now+data.deadlineMs,timing:'tentative_until_send' as const,warnings,attachments:this.attachments.preview(actor,data.uploads),...(data.task?{task:{title:data.task.title,criteria:encodedPreview(data.task.criteria,400),criteria_bytes:Buffer.byteLength(data.task.criteria),truncated:data.task.criteria!==encodedPreview(data.task.criteria,400)}}:{})};
   });
  }
  read(actor:Session,id:string,offset=0,limit=4096,part:'body'|'criteria'='body'){

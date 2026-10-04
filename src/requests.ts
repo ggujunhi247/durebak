@@ -4,12 +4,13 @@ import {z} from 'zod';
 import {sendSchema,taskSchema,short,body,fail,hash,type Session,type Message} from './domain.js';
 import {transaction} from './transactions.js';
 import {encodedPreview} from './content.js';
+import {ScopedAttachments,uploadsSchema} from './scoped-attachments.js';
 import {ProtectedTasks,type ProtectedTaskSummary} from './protected-tasks.js';
 import {queuePolicy} from './queue-policy.js';
 
-export const requestPayloadSchema=sendSchema.omit({replyTo:true}).extend({deadlineMs:z.number().int().min(1).max(3600000).default(600000),task:taskSchema.omit({key:true}).strict().optional()}).strict();
+export const requestPayloadSchema=sendSchema.omit({replyTo:true}).extend({deadlineMs:z.number().int().min(1).max(3600000).default(600000),uploads:uploadsSchema,task:taskSchema.omit({key:true}).strict().optional()}).strict();
 export const requestCreateSchema=requestPayloadSchema.extend({previewId:short.optional()}).strict();
-export const requestMessageSchema=z.object({id:short,version:z.number().int().positive(),kind:z.enum(['answer','note','result']),body,key:short,expectedTaskVersion:z.number().int().positive().optional(),hash:z.string().regex(/^[a-f0-9]{64}$/).optional()}).strict();
+export const requestMessageSchema=z.object({id:short,version:z.number().int().positive(),kind:z.enum(['answer','note','result']),body,key:short,expectedTaskVersion:z.number().int().positive().optional(),hash:z.string().regex(/^[a-f0-9]{64}$/).optional(),uploads:uploadsSchema}).strict();
 export const checkpointSchema=z.object({consumer:short,version:z.number().int().min(0),messageCursor:z.number().int().min(0),controlCursor:z.number().int().min(0)}).strict();
 export interface Checkpoint {consumer:string;version:number;message_cursor:number;control_cursor:number}
 export interface ControlNotice {cursor:number;request_id:string;reason:string;created_ms:number;observed_ms:number|null;acked_ms:number|null}
@@ -19,7 +20,7 @@ export interface CollaborationRequest {id:string;workspace:string;creator:string
 interface StoredRequest extends CollaborationRequest {key:string;digest:string}
 const terminal=(state:RequestState)=>!['pending','accepted'].includes(state);
 export class RequestRepository {
- constructor(private db:DatabaseSync,private clock:{now():number},private enqueue:(actor:Session,input:z.input<typeof sendSchema>,now:number)=>Message,private validatePreview:(actor:Session,id:string,payload:z.output<typeof requestPayloadSchema>,now:number)=>void,private tasks:ProtectedTasks){}
+ constructor(private db:DatabaseSync,private clock:{now():number},private enqueue:(actor:Session,input:z.input<typeof sendSchema>,now:number)=>Message,private validatePreview:(actor:Session,id:string,payload:z.output<typeof requestPayloadSchema>,now:number)=>void,private tasks:ProtectedTasks,private attachments:ScopedAttachments){}
  private one<T>(sql:string,...args:SQLInputValue[]){return this.db.prepare(sql).get(...args) as T|undefined;}
  private all<T>(sql:string,...args:SQLInputValue[]){return this.db.prepare(sql).all(...args) as T[];}
  private run(sql:string,...args:SQLInputValue[]){return this.db.prepare(sql).run(...args);}
@@ -60,10 +61,12 @@ export class RequestRepository {
    const message=this.enqueue(actor,{to:data.to,body:data.body,key:`request:${id}:initial`,priority:data.priority,...(data.urgentReason?{urgentReason:data.urgentReason}:{}),delayMs:data.delayMs,ttlMs:data.ttlMs},now);
    this.run('INSERT INTO requests(id,workspace,creator,recipient,message_id,created_ms,deadline_at,key,digest) VALUES(?,?,?,?,?,?,?,?,?)',id,actor.workspace,actor.id,data.to,message.id,now,deadline,data.key,digest);
    this.run("INSERT INTO request_messages(message_id,request_id,kind) VALUES(?,?,'question')",message.id,id);
+   this.attachments.link(actor,this.visible(actor,id),message.id,data.uploads);
    if(data.task)this.tasks.create(this.visible(actor,id),data.task,now);
    return this.snapshot(this.visible(actor,id),actor);
   });
  }
+ attachmentList(actor:Session,id:string,after=0,limit=10){this.get(actor,id);return this.attachments.list(actor,this.visible(actor,id),after,limit);}
  taskRead(actor:Session,id:string,offset=0,limit=4096){this.get(actor,id);return this.tasks.read(actor,this.visible(actor,id),offset,limit);}
  get(actor:Session,id:string){short.parse(id);this.expire();return this.snapshot(this.visible(actor,id),actor);}
  list(actor:Session,after='',limit=10){
@@ -110,6 +113,7 @@ export class RequestRepository {
    if(delivered){if(delivered.digest!==digest)fail('idempotency_conflict');return {id:delivered.message_id,request_id:q.id,late:false};}
    if(terminal(q.state)){
     if(data.kind!=='result'||actor.id!==q.recipient||!['cancelled','timed_out'].includes(q.state))fail('request_terminal');
+    if(data.uploads?.length)fail('terminal_attachment_forbidden');
     const old=this.one<{digest:string}>('SELECT digest FROM request_late WHERE request_id=? AND author=? AND key=?',q.id,actor.id,data.key);
     if(old){if(old.digest!==digest)fail('idempotency_conflict');return {late:true,id:q.id};}
     if(this.one<{n:number}>('SELECT count(*) n FROM request_late WHERE request_id=?',q.id)!.n>=100)fail('late_capacity_exceeded');
@@ -123,6 +127,7 @@ export class RequestRepository {
    if(data.kind==='result')this.tasks.apply(q,'completed',data.expectedTaskVersion,data.hash);
    const m=this.enqueue(actor,{to:actor.id===q.creator?q.recipient:q.creator,body:data.body,key:`rq:${hash(JSON.stringify([q.id,data.key,data.kind]))}`,priority:'normal'},now);
    this.run('INSERT INTO request_messages(message_id,request_id,kind,author,key,digest) VALUES(?,?,?,?,?,?)',m.id,q.id,data.kind,actor.id,data.key,digest);
+   this.attachments.link(actor,q,m.id,data.uploads);
    if(data.kind==='result')this.run("UPDATE requests SET state='completed',version=version+1 WHERE id=?",q.id);
    return {id:m.id,request_id:q.id,late:false};
   });

@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { fail } from './domain.js';
 import { transaction } from './transactions.js';
 
-export const schemaVersion = 7;
+export const schemaVersion = 8;
 
 // Preserve released migration SQL and append new versions at the end.
 export function migrate(db: DatabaseSync) {
@@ -138,6 +138,23 @@ export function migrate(db: DatabaseSync) {
             request_id TEXT PRIMARY KEY REFERENCES requests(id), task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id)
           ) STRICT;
           PRAGMA user_version=7;
+        `);
+      }
+      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 8) {
+        db.exec(`
+          CREATE TABLE private_uploads (
+            id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES sessions(id), workspace TEXT NOT NULL,
+            name TEXT NOT NULL, hash TEXT NOT NULL, content TEXT NOT NULL, bytes INTEGER NOT NULL,
+            key TEXT NOT NULL, digest TEXT NOT NULL, UNIQUE(owner,key)
+          ) STRICT;
+          CREATE TABLE request_attachment_handles (
+            cursor INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
+            request_id TEXT NOT NULL REFERENCES requests(id), message_id TEXT NOT NULL REFERENCES messages(id),
+            upload_id TEXT NOT NULL REFERENCES private_uploads(id), UNIQUE(message_id,upload_id)
+          ) STRICT;
+          CREATE INDEX scoped_attachment_request ON request_attachment_handles(request_id,cursor);
+          ALTER TABLE request_previews ADD COLUMN attachment_digest TEXT;
+          PRAGMA user_version=8;
         `);
       }
     });
