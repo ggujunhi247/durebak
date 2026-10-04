@@ -85,3 +85,9 @@ schema8→9에 불변 task revision·self_reported verification evidence와 완�
 최신 소스는 schema9, 보호 작업·private 첨부·첨부 preview·불변 결과 revision·self_reported evidence/재검증·bounded work bundle·one-shot CLI 협업 화면을 포함한다. 전체168개 테스트, 타입 검사,65파일 package allowlist·독립 설치 smoke·저장소·gitleaks와 PR21/22의 Linux/macOS CI를 통과했다. 독립 리뷰에서 revision3개/화면2개의 Important 문제를 각 RED→GREEN 후 수정하고 전체 회귀를 다시 실행했다. 이 문서의 alpha.3/alpha.4 및 schema7/8 단락은 단계별 검증 이력이며 과거 release 파일에 새 기능을 소급하지 않는다.
 
 npm registry 게시와 GitHub artifact 전달은 release workflow 결과로 각각 확인한다. 소스의 version 표시는 registry publish 성공을 뜻하지 않는다. 실제 Claude/OpenCode 이종 모델 왕복·native Managed wake·자동 검증 명령 실행은 이 테스트 결과에 포함되지 않는다.
+
+## schema10 개발: Managed 관리자 설정
+
+alpha.5 immutable release는 schema9입니다. 이후 개발 소스는 관리자 전용 native binding·on/off grant·owner renewal·자기 설정 조회를 추가합니다. 기본 off이며 세션/peer는 grant를 생성하거나 변경할 수 없습니다. runtime-local 선언 profile/native ID 유일성, owner credential 1회 발급과 비공개0600 파일, version/epoch CAS, durable scope·사용량 보존, clock high-water와 만료 latch를 검증합니다. 실제 identity 검증·machine-wide fencing·wake selection·예약·driver·model turn은 아직 구현 범위가 아닙니다. `auto_wake:false`, readiness unverified, stop unknown을 유지합니다.
+
+독립 리뷰에서 만료 관측 후 clock rollback에 의한 grant 부활과 off-state TTL 소실을 발견했습니다. 3개 재현 테스트가 실패하는 것을 확인한 뒤 durable observation/TTL 저장으로 수정했습니다. schema1–9 migration은 변경하지 않고 독립 released schema9 fixture의 credential/request 보존을 확인합니다.

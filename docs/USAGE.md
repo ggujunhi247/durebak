@@ -286,3 +286,18 @@ revision이 있는 작업의 결과 `request_message`에는 최신 hash와 작�
 `durebak dashboard --session FILE`은 한 번의 읽기 전용 CLI 화면으로 세션별 도구·선언된 availability·bridge 연락 상태, 자신이 참여한 요청의 상태/version·기한·재검증 상태를 보여줍니다. 본문·작업 제목·기준·artifact hash·credential·사용자 경로는 표시하지 않습니다. bridge fresh는 실제 모델 준비·진행 증거가 아니며 host readiness/progress는 unknown입니다.
 
 다른 코드 도구는 같은 `collaboration_status {sessionAfter?,requestAfter?}` HTTP/MCP operation을 호출할 수 있습니다. 세션20개/요청10개 페이지이고 `next/has_more`를 따라 나머지를 조회합니다. CLI 화면도 페이지가 더 있으면 표시합니다. 자기 세션 건강은 별도로 포함합니다. 자동 polling·receive·ACK·작업 수락·native wake는 하지 않습니다. 브라우저 UI는 후속 단계입니다.
+
+### Managed 실행 설정 (개발 중)
+
+schema10 개발 소스에는 관리자 전용 설정 경로가 있습니다. 실제 native 실행 driver와 자동 깨우기는 아직 활성화되지 않습니다. 기존 활성 세션을 resume하는 명령이 아닙니다.
+
+```sh
+durebak managed-bind SESSION_ID --harness codex --native-id NATIVE_ID --profile PROFILE_ID --instance DRIVER_ID --key BIND_KEY --out OWNER_FILE --data-dir RUNTIME_DIR
+durebak managed-policy --json '{"bindingId":"BINDING_ID","version":1,"enabled":false,"ttlMs":1000,"key":"configure"}' --data-dir RUNTIME_DIR
+```
+
+Binding은 같은 runtime 안에서 선언된 profile/native ID의 중복 소유를 거부합니다. 실제 native ID·profile 검증이나 다른 runtime 사이의 소유 fencing을 보장하지 않습니다. `OWNER_FILE`은 한 번만 발급되는 비밀 owner credential을 포함하고 권한0600으로 새로 생성됩니다. 기존 파일을 덮어쓰거나 idempotent retry로 비밀을 재발급하지 않습니다. 이 파일을 공유하거나 모델 입력에 넣지 마세요.
+
+정책 변경에는 현재 version과 고유 key가 필요합니다. 기본 off, 최대 총30 turns·동시3·60분입니다. off 상태의 TTL 설정은 보존하며 최초 enable부터 만료를 계산합니다. enable 이후 TTL 변경·만료된 scope의 재활성화는 거부합니다. off/on·재시작·같은 key 재시도는 scope와 사용량을 초기화하지 않습니다. 관측한 만료와 시각은 DB에 남고, 시계 역행이나 owner lease 만료 시 execution은 unknown으로 유지됩니다. lease 만료는 native 실행 중단 근거가 아닙니다.
+
+세션 HTTP/MCP의 `managed_status`는 자기 설정만 조회하며 native ID·owner credential을 반환하지 않습니다. 설정이 enabled여도 `auto_wake:false`, `host_readiness:unverified`, `host_stopped:unknown`입니다. 세션 bearer로 grant/binding을 만들 수 없습니다.
