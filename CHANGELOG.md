@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.20 — 2026-10-05
 
+- Recheck the live OpenCode driver and owner after asynchronous observation, including cancellation; reject closure instead of reading a closed ledger or returning stale outcomes after owner loss.
+- Cover cached prepared and terminal observation races without model calls or native replay. Native controller/model authority and automatic wake remain unverified.
 - Reconcile the README and missing alpha.17–alpha.19 history with the delivered source and verification limits.
 - Generate new GitHub release notes from the exact tagged version section; reject missing, empty or duplicate notes while preserving existing release asset retries.
 

@@ -277,3 +277,7 @@ This establishes the asynchronous preflight contract required for later owned na
 ## Codex observer retirement (alpha.19)
 
 Codex turn-ledger connections now retire only intents they created. Closing a read-only observer or a connection whose submission was refused cannot cancel another connection's prepared input or replace its running receipt with unknown. The submitting connection still marks its own prepared input not_accepted and submitting/running input unknown when closed; late callbacks cannot record acceptance. No native interrupt, resume or replay is implied by closing a ledger connection. The host factory's ownership fence and process cleanup remain separate. This matches the existing OpenCode connection-local retirement contract and adds no model or automatic-wake authority.
+
+## OpenCode observation ownership (alpha.20)
+
+OpenCode observation and cancellation recheck the live driver and profile owner after awaiting the observation layer and before reading the ledger or returning an outcome. Even an already-resolved prepared or terminal read yields at the async boundary; driver close must reject with native_driver_closed, and owner loss must reject with native_owner_closed. Previously these races could read a closed SQLite connection or return a cached successful result after losing ownership. Regression tests cover driver/owner loss for prepared and terminal reads and preserve the durable state without extra submission or abort. This repair does not establish native controller/model authority or automatic wake.
