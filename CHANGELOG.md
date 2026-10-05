@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.21 — 2026-10-05
+
+- Refuse database directories owned by another effective OS user, including final symlinks with a trailing slash.
+- Validate the database and existing WAL/SHM/rollback journals before SQLite opens: regular owner-private files, current effective UID and a single hardlink. Recheck generated sidecars before migration and after initialization.
+- Preserve unsafe files unchanged instead of silently changing permissions or deleting recovery data. Normal private WAL reopening and concurrent connections remain supported. These checks do not isolate processes sharing an OS account.
+
 ## 0.1.0-alpha.20 — 2026-10-05
 
 - Recheck the live OpenCode driver and owner after asynchronous observation, including cancellation; reject closure instead of reading a closed ledger or returning stale outcomes after owner loss.
