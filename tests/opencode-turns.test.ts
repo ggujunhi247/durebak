@@ -59,3 +59,35 @@ test('a terminal ledger outcome cannot override a still-busy native runner',asyn
 test('missing configured model or connection refuses POST without claiming bad authentication',async t=>{for(const missing of ['model','connection']){const f=await fixture(t),d=f.driver();if(missing==='model')f.state.providers.all[0]!.models={};else f.state.providers.connected=[];await assert.rejects(d.submit(f.identity,'work'),/host_unknown/);assert.equal(f.state.posts,0);const h=await d.health();assert.equal(h.auth,'unknown');assert.equal(h.entitlement,'unverified');assert.equal(missing==='model'?h.model:h.connection,missing==='model'?'missing':'absent');}});
 test('status read failure is unknown and does not leak raw host errors',async t=>{const f=await fixture(t),d=f.driver();f.state.statusFails=true;await assert.rejects(d.submit(f.identity,'work'),e=>e instanceof Error&&e.message==='host_unknown');assert.equal(f.state.posts,0);assert.equal((await d.health()).nativeState,'unknown');});
 test('stale unfinished assistant with idle native status cannot spend abort',async t=>{const f=await fixture(t),d=f.driver();await d.submit(f.identity,'work');f.state.history.push(running(f.row().message_id as string));f.state.statuses={};await d.interrupt(f.identity);assert.equal(f.state.aborts,0);});
+
+for(const loss of ['driver','owner'] as const)for(const phase of ['prepared','terminal'] as const)test(`observation rejects ${loss} loss after cached ${phase} read`,async t=>{
+ const f=await fixture(t),d=f.driver();let submission:Promise<unknown>|undefined;
+ if(phase==='prepared'){
+  f.state.healthGate=gate();
+  submission=assert.rejects(d.submit(f.identity,'work'),new RegExp(loss==='driver'?'native_driver_closed':'native_owner_closed'));
+  assert.equal(f.row().state,'prepared');
+ }else{
+  await d.submit(f.identity,'work');f.state.history.push(answer(f.row().message_id as string));
+  assert.equal((await d.observe(f.identity)).state,'succeeded');
+ }
+ const pending=d.observe(f.identity);
+ if(loss==='driver')d.close();else f.fence.close();
+ try{await assert.rejects(pending,new RegExp(loss==='driver'?'native_driver_closed':'native_owner_closed'));}
+ finally{if(submission){f.state.healthGate!.open();await submission;}}
+ assert.equal(f.state.posts,phase==='terminal'?1:0);assert.equal(f.state.aborts,0);
+ assert.equal(f.row().state,phase==='terminal'?'succeeded':loss==='driver'?'not_accepted':'prepared');
+});
+
+for(const loss of ['driver','owner'] as const)test(`cancellation rejects ${loss} loss between observation and ledger recheck`,async t=>{
+ const f=await fixture(t),d=f.driver();await d.submit(f.identity,'work');
+ // Preserve real HTTP history and durable observation; control only the
+ // microtask boundary between the inner observer and its caller.
+ const target=d as unknown as {observeOnly:(id:typeof f.identity)=>ReturnType<OpencodeTurns['observe']>};
+ const original=target.observeOnly.bind(d);
+ t.mock.method(target,'observeOnly',async(id:typeof f.identity)=>{
+  const result=await original(id);queueMicrotask(()=>{if(loss==='driver')d.close();else f.fence.close();});return result;
+ });
+ await assert.rejects(d.interrupt(f.identity),new RegExp(loss==='driver'?'native_driver_closed':'native_owner_closed'));
+ assert.equal(f.row().state,'unknown');assert.equal(f.row().stop_requested,1);
+ assert.equal(f.state.posts,1);assert.equal(f.state.aborts,0);
+});
