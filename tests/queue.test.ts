@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../src/store.js';
+import type {DatabaseSync,SQLInputValue} from 'node:sqlite';
 function fixture(t: test.TestContext) {
   const dir=mkdtempSync(join(tmpdir(),'durebak-queue-')); let now=1700000000000;
   const clock={now:()=>now}; const s=new Store(dir,clock);
@@ -11,6 +12,20 @@ function fixture(t: test.TestContext) {
   const a=s.register('w','a','codex').session,b=s.register('w','b','claude').session;
   return {s,a,b,dir,clock,advance:(ms:number)=>{now+=ms;}};
 }
+test('queue status maintains expiry without materializing message bodies',t=>{
+ const {s,a,b,advance}=fixture(t),body='x'.repeat(65536);
+ for(let i=0;i<3;i++)s.send(a,{to:b.id,body,key:'large-'+i,ttlMs:10000});
+ const db=(s as unknown as {db:DatabaseSync}).db,prepare=db.prepare.bind(db);let loadedBytes=0;
+ t.mock.method(db,'prepare',(sql:string)=>{
+  const statement=prepare(sql),all=statement.all.bind(statement);
+  t.mock.method(statement,'all',(...args:SQLInputValue[])=>{
+   const rows=all(...args);for(const row of rows)if(typeof row.body==='string')loadedBytes+=Buffer.byteLength(row.body);return rows;
+  });return statement;
+ });
+ const pending=s.queueStatus(b);assert.equal(pending.counts.queued,3);assert.equal(pending.retry_after_ms,5000);
+ advance(10000);const expired=s.queueStatus(b);assert.equal(expired.counts.expired,3);assert.equal(expired.retry_after_ms,null);
+ assert.equal(loadedBytes,0,'metadata polling must not load private message payloads');
+});
 test('default queue waits, hides undelivered bodies and uses delivery receipts',t=>{
   const {s,a,b,advance}=fixture(t);const m=s.send(a,{to:b.id,body:'hello',key:'1'});
   assert.equal(m.status,'queued');assert.equal(s.receive(b).items.length,0);

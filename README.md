@@ -6,7 +6,7 @@ Local, durable collaboration between coding-agent sessions. Experimental alpha f
 
 두레박은 같은 컴퓨터의 코딩 에이전트 세션이 메시지·작업·결과를 주고받는 로컬 협업 런타임입니다. 각 세션은 자기 호스트와 맥락을 유지하고, CLI 또는 MCP로 참여합니다.
 
-**현재 소스: 0.1.0-alpha.21. 사용자용 협업은 Cooperative 모드입니다.** SQLite 저장소, 인증된 loopback 서버, CLI, MCP stdio bridge가 구현되어 있습니다. 실제 MCP 프로세스 간 통신을 테스트했으며, 호스트별 실제 시험 결과와 제약은 [호스트 테스트](docs/HOST-TESTING.md)에 기록합니다. 요청별 대화·기한·취소 notice·checkpoint, 공유 preview, 보호 작업·비공개 텍스트 첨부, revision별 자기보고 검증·재검증과 CLI 협업 화면을 제공합니다. 내부 실험용 Codex·OpenCode 소유 호스트와 실행 ledger, 비동기 준비 상태 검사도 개발 중입니다. 이 내부 구성의 실제 모델 실행·controller 연결·자동 깨우기는 아직 검증하지 않았습니다. 자동 세션 실행·깨우기와 반복 작업 스케줄러는 후속 기능입니다.
+**현재 소스: 0.1.0-alpha.22. 사용자용 협업은 Cooperative 모드입니다.** SQLite 저장소, 인증된 loopback 서버, CLI, MCP stdio bridge가 구현되어 있습니다. 실제 MCP 프로세스 간 통신을 테스트했으며, 호스트별 실제 시험 결과와 제약은 [호스트 테스트](docs/HOST-TESTING.md)에 기록합니다. 요청별 대화·기한·취소 notice·checkpoint, 공유 preview, 보호 작업·비공개 텍스트 첨부, revision별 자기보고 검증·재검증과 CLI 협업 화면을 제공합니다. 내부 실험용 Codex·OpenCode 소유 호스트와 실행 ledger, 비동기 준비 상태 검사도 개발 중입니다. 이 내부 구성의 실제 모델 실행·controller 연결·자동 깨우기는 아직 검증하지 않았습니다. 자동 세션 실행·깨우기와 반복 작업 스케줄러는 후속 기능입니다.
 
 ## 시작하기
 
@@ -81,6 +81,7 @@ npm run lab
 | 개발·테스트 | [기여 안내](CONTRIBUTING.md) · [구현 현황](docs/IMPLEMENTATION.md) · [구조](docs/ARCHITECTURE.md) |
 | 실제 호스트 시험 | [호스트 테스트](docs/HOST-TESTING.md) |
 | 릴리스 관리 | [배포 절차](docs/RELEASING.md) · [변경점](CHANGELOG.md) |
+| 성능 측정과 한계 | [큐 성능](docs/PERFORMANCE.md) |
 
 ## 배포
 

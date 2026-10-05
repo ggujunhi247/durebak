@@ -13,7 +13,7 @@ export function messageQueue(db:DatabaseSync){
  const maintain=(recipient:string,now:number)=>{
 
     expireRequestsWithinTransaction(db,now);
-    const rows=all<QueuedMessage>("SELECT * FROM messages WHERE recipient=? AND status IN ('queued','in_flight')",recipient);
+    const rows=all<Pick<QueuedMessage,'id'|'workspace'|'status'|'attempts'|'expires_at'|'lease_until'>>("SELECT id,workspace,status,attempts,expires_at,lease_until FROM messages WHERE recipient=? AND status IN ('queued','in_flight')",recipient);
     for (const row of rows) {
       if (row.expires_at!==null && row.expires_at<=now) {
         run("UPDATE messages SET status='expired',lease_until=NULL WHERE id=?",row.id);

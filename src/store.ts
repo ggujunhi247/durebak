@@ -161,7 +161,7 @@ export class Store {
   private summary(actor: Session, now: number) {
     const state=this.availability(actor);
     const counts=Object.fromEntries(this.all<{status:string;n:number}>('SELECT status,count(*) n FROM messages WHERE recipient=? GROUP BY status',actor.id).map(r=>[r.status,r.n]));
-    const pending=this.all<QueuedMessage>("SELECT * FROM messages WHERE recipient=? AND status IN ('queued','in_flight')",actor.id)
+    const pending=this.all<Pick<QueuedMessage,'status'|'priority'|'attempts'|'due_at'|'lease_until'|'expires_at'>>("SELECT status,priority,attempts,due_at,lease_until,expires_at FROM messages WHERE recipient=? AND status IN ('queued','in_flight')",actor.id)
       .filter(r=>canDeliver(state,r.priority));
     const times=state==='paused'?[]:pending.filter(r=>r.status==='queued'||r.attempts<queuePolicy.max_attempts).flatMap(r=>{const due=r.status==='queued'?r.due_at:r.lease_until!+retryDelay(r.attempts);return r.expires_at===null||due<r.expires_at?[due]:[];});
     return {state,counts,policy:queuePolicy,retry_after_ms:times.length?Math.max(0,Math.min(...times)-now):null};
