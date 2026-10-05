@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.22 — 2026-10-05
+
+- Read only queue metadata during maintenance and status polling, avoiding materialization of pending message bodies while preserving expiry, retry hints, receipts and session availability.
+- Add a deterministic payload-loading regression and a synthetic local benchmark. In one same-machine Node26.8.1 comparison with 100 messages of 64KiB each, status p50 decreased from 3.231ms to 2.442ms; see docs/PERFORMANCE.md for method and limits. No security or durability checks are removed.
+
 ## 0.1.0-alpha.21 — 2026-10-05
 
 - Refuse database directories owned by another effective OS user, including final symlinks with a trailing slash.
