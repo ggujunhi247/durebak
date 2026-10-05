@@ -39,3 +39,30 @@ test('verified GitHub delivery proceeds independently of npm publisher authentic
  assert.match(job,/sha256sum --check SHA256SUMS/);
  assert.ok(job.includes('cmp "$asset" "$RUNNER_TEMP/existing-assets/$name"'));
 });
+
+test('new GitHub release receives prepared version notes rather than the entire changelog',t=>{
+ const root=mkdtempSync(join(tmpdir(),'durebak-release-notes-'));
+ t.after(()=>rmSync(root,{recursive:true,force:true}));
+ mkdirSync(join(root,'release'));mkdirSync(join(root,'bin'));mkdirSync(join(root,'scripts'));
+ writeFileSync(join(root,'release','package.tgz'),'verified');
+ writeFileSync(join(root,'scripts','release-notes.mjs'),readFileSync('scripts/release-notes.mjs','utf8'));
+ writeFileSync(join(root,'CHANGELOG.md'),'# Changelog\n\n## 1.2.3\n\n- Exact version notes.\n\n## 1.2.2\n\n- Previous notes.\n');
+ const received=join(root,'received-notes');
+ writeFileSync(join(root,'bin','gh'),`#!/bin/sh
+case "$1 $2" in
+ 'api repos/example/durebak/releases/tags/v1.2.3') echo 'gh: Not Found (HTTP 404)' >&2; exit 1 ;;
+ 'release create')
+  while [ "$#" -gt 0 ]; do
+   if [ "$1" = '--notes-file' ]; then shift; cp "$1" "$MOCK_RECEIVED"; exit 0; fi
+   shift
+  done
+  exit 8 ;;
+ *) exit 9 ;;
+esac
+`,{mode:0o700});
+ const section=readFileSync('.github/workflows/release.yml','utf8').split('- name: Create or verify GitHub release')[1];
+ const script=section.split('        run: |\n')[1].replace(/^          /gm,'');
+ const result=spawnSync('bash',['-e','-o','pipefail','-c',script],{cwd:root,encoding:'utf8',env:{...process.env,PATH:`${join(root,'bin')}:${process.env.PATH}`,RUNNER_TEMP:root,RELEASE_TAG:'v1.2.3',RELEASE_CHANNEL:'latest',RELEASE_REPOSITORY:'example/durebak',MOCK_RECEIVED:received}});
+ assert.equal(result.status,0,result.stderr);
+ assert.equal(readFileSync(received,'utf8'),'## 1.2.3\n\n- Exact version notes.\n');
+});

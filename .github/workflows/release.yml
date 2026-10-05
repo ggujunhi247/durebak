@@ -217,7 +217,8 @@ jobs:
               fi
             done
           elif [[ "$(cat "$RUNNER_TEMP/release-error")" == *"(HTTP 404)"* ]]; then
-            gh release create "$RELEASE_TAG" release/* --verify-tag --title "$RELEASE_TAG" --notes-file CHANGELOG.md "${args[@]}"
+            node scripts/release-notes.mjs "$RELEASE_TAG" > "$RUNNER_TEMP/release-notes.md"
+            gh release create "$RELEASE_TAG" release/* --verify-tag --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md" "${args[@]}"
           else
             cat "$RUNNER_TEMP/release-error" >&2
             exit 1

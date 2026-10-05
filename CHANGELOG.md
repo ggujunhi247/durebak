@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- Reconcile the README and missing alpha.17–alpha.19 history with the delivered source and verification limits.
+- Generate new GitHub release notes from the exact tagged version section; reject missing, empty or duplicate notes while preserving existing release asset retries.
+
+## 0.1.0-alpha.19 — 2026-10-05
+
+- Limit Codex ledger connection retirement to attempts created by that connection; closing an observer or a refused submitter preserves another driver's prepared, submitting and running attempts.
+- Preserve uncertain outcomes on submitting/running driver close and reject late receipts without native replay, interrupt or resume.
+- Verify 477 passing tests with two skips, Linux/macOS CI and installed GitHub artifacts. Native model execution, controller integration and automatic wake remain unverified.
+
+## 0.1.0-alpha.18 — 2026-10-05
+
+- Add bounded asynchronous readiness to the internal mock execution controller; recheck ownership, policy, source revision, cancellation and deadline after awaiting readiness and before submission.
+- Preserve observational intent replay, prevent duplicate reservation charges and submissions, and fail closed on rejected, timed-out or late readiness.
+- Wait through transient process-group inspection uncertainty in macOS cleanup tests while still requiring confirmed disappearance. Native controller authority and actual model execution remain unverified.
+
+## 0.1.0-alpha.17 — 2026-10-05
+
+- Retain confirmed owned-process-group disappearance in Codex and OpenCode host cleanup; never inspect or signal that numeric group again during retry or escalation because it may be reused.
+- Keep ownership fenced until stdio and helper cleanup also complete; permission-denied inspection remains uncertain and requires explicit recovery.
+- Cover inherited pipes, retained disappearance and reused group identifiers with regression tests. Actual model execution, native controller integration and automatic wake remain unverified.
+
 ## 0.1.0-alpha.16 — 2026-10-05
 
 - Verify the owned child's birth identity and exact accepted loopback TCP tuple with parent-only macOS kernel inspection before sending any HTTP bytes; hand that same stream to a request-local Agent.
