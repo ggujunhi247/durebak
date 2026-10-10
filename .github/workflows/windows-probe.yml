@@ -1,0 +1,21 @@
+name: Windows storage probe
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  storage-probe:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Exercise actual Windows storage probe
+        run: node --test tests/windows-probe.test.mjs
+      - name: Record sanitized investigation evidence
+        run: node scripts/windows-storage-probe.mjs
