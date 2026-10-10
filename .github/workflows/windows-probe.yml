@@ -19,3 +19,8 @@ jobs:
         run: node --test tests/windows-probe.test.mjs tests/windows-probe-report.test.mjs
       - name: Record sanitized investigation evidence
         run: node scripts/windows-storage-probe.mjs
+      - name: Build and verify unsupported runtime refusal
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          node --test tests/windows-storage-refusal.test.mjs

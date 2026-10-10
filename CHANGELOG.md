@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-alpha.23 — 2026-10-11
+
+- Update the pinned MCP SDK from 1.30.1 to 1.32.1 to resolve GHSA-6qxp-vccf-f47h. The advisory excludes the stdio client/server use in this alpha.
+- Refuse storage on platforms without OS user identity before creating directories or database files, with `unsupported_storage_platform`. Windows remains unsupported.
+- Add a synthetic Windows ACL/SQLite investigation and validate its public JSON output: reject malformed or incomplete reports, discard unexpected fields, and bound error diagnostics. This investigation does not enable Windows product support.
+- Give the transient process-group inspection regression the same shutdown budget as descendant-retirement fixtures, retaining its ownership assertions under CI load. Product shutdown limits are unchanged.
+- Clarify supported platforms and remaining Windows validation gates in installation, usage and compatibility documentation. Database schema and protocol versions are unchanged.
+
 ## 0.1.0-alpha.22 — 2026-10-05
 
 - Read only queue metadata during maintenance and status polling, avoiding materialization of pending message bodies while preserving expiry, retry hints, receipts and session availability.

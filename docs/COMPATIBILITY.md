@@ -1,6 +1,6 @@
 # Compatibility
 
-Status updated 2026-10-01. A generated configuration is not evidence of a live host integration.
+Status updated 2026-10-11. A generated configuration is not evidence of a live host integration.
 
 | Component | Evidence | Status |
 | --- | --- | --- |
@@ -9,7 +9,7 @@ Status updated 2026-10-01. A generated configuration is not evidence of a live h
 | Codex CLI 0.146.0 | Generated-setup real Codex-to-Codex lab, separate identities, 10 MCP calls; isolated-profile TOML parser | Live communication verified; see testing reports |
 | Claude Code 2.1.87 | Configuration generated; live API authentication expired | Experimental |
 | OpenCode 1.18.33 | Temporary installation: effective config parser and permission/identity guard verified; not globally installed; model/API call not tested | Experimental |
-| Windows | Unix private-file assumptions not validated | Unsupported for this alpha |
+| Windows | Hosted runner ACL/SQLite investigation passed; inherited file/sidecar private-access observations remain false; standard-user cross-user access and Windows 11 desktop validation pending | Unsupported for this alpha; storage refuses platforms without OS user identity before creation |
 | Native resume / automatic wake | Not implemented | Unsupported |
 
 The plugin is an optional skill bundle. MCP configuration and the runtime remain separate. Plugin marketplace installation, updates and uninstall have not been end-to-end verified. Do not present this as marketplace-published support.
@@ -27,3 +27,9 @@ On 2026-09-30 and again on 2026-10-01, Codex → Claude Code sent the request bu
 The lab supports `--worker` and `--reviewer` for all three harnesses (`claude` remains an alias for `claude-code`). Scripted MCP mode is transport evidence only, even when harness names are passed. Each live invocation starts a new native session; the two worker invocations reuse a Durebak identity, not a native conversation.
 
 OpenCode lab runs with `--pure`, isolated XDG directories and a verified effective MCP/permission configuration. It does not copy global OAuth credentials; configure API credentials in the process environment, never in committed files. Config mismatches block execution. Version changes require rechecking these CLI contracts. Each step has a 90-second deadline; Claude has a $1 per-invocation limit. Other hosts have no monetary limit enforced by this lab. Usage is the last reported event, not a total; missing fields are null and cache meanings differ by host. Raw conversations and local paths are excluded from reports.
+
+## Windows investigation and alpha.23 maintenance
+
+The [Windows storage probe](testing/windows-storage-probe.md) exercises synthetic ACL/owner/link rejection and observes SQLite descriptors. Its JSON output is validated and sanitized. A passing investigation job does not enable Windows runtime support. Production ACL handling, helper delivery, file replacement races and desktop validation remain outstanding. WSL is a separate Linux environment; no Windows-native support follows from Linux CI.
+
+Alpha.23 updates the pinned MCP SDK from 1.30.1 to 1.32.1 to resolve [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h). The advisory concerns HTTP OAuth clients and excludes stdio clients/servers; Durebak currently uses stdio. This dependency update is not evidence of credential exposure. Database schema and protocol versions are unchanged.

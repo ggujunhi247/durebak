@@ -5,6 +5,9 @@ import { fail } from './domain.js';
 import { migrate } from './migrations.js';
 
 export function privateDirectory(path: string) {
+  // POSIX mode bits cannot establish private storage on Windows. Refuse
+  // before creating anything until an OS-specific ACL backend is available.
+  if (typeof process.geteuid !== 'function') fail('unsupported_storage_platform');
   mkdirSync(path, { recursive: true, mode: 0o700 });
   const stat = lstatSync(path.replace(/\/+$/,'')||'/');
   if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || stat.uid !== process.geteuid?.()) fail('unsafe_data_directory');
