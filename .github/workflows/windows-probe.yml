@@ -16,6 +16,6 @@ jobs:
         with:
           node-version: 24
       - name: Exercise actual Windows storage probe
-        run: node --test tests/windows-probe.test.mjs
+        run: node --test tests/windows-probe.test.mjs tests/windows-probe-report.test.mjs
       - name: Record sanitized investigation evidence
         run: node scripts/windows-storage-probe.mjs
