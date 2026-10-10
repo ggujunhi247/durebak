@@ -18,3 +18,5 @@ Primary references:
 - [PowerShell module-path inheritance through intermediate processes](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_psmodulepath)
 
 The probe pins `PSModulePath` to its selected Windows PowerShell installation. A PowerShell7 → Node → Windows PowerShell5 chain otherwise inherits incompatible shared module paths; the initial Windows CI exposed `CouldNotAutoloadMatchingModule` while querying ACLs. This is a probe launcher fix, not a relaxation of ACL policy.
+
+Initial hosted-runner observations also found that an ordinary inherited file and SQLite sidecars did not satisfy the proposed current-user-owner policy (`inherited_file_private=false`, `sqlite_sidecars_private=false`). The private-file positive fixture uses creation-time explicit ownership, while inherited-file observations remain separate booleans. A protected parent DACL alone is therefore insufficient evidence for the entire production storage policy. Standard-user and elevated-token ownership must be tested separately before choosing a Windows backend.

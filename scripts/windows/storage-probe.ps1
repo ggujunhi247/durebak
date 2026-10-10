@@ -16,6 +16,7 @@ public static class DurebakProbe {
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateDirectory(string path,ref SA attributes);
  [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr pointer);
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern SafeFileHandle CreateFile(string path,uint access,uint share,IntPtr security,uint creation,uint flags,IntPtr template);
+ [DllImport("kernel32.dll",EntryPoint="CreateFileW",CharSet=CharSet.Unicode,SetLastError=true)] static extern SafeFileHandle CreatePrivateFileNative(string path,uint access,uint share,ref SA security,uint creation,uint flags,IntPtr template);
  [DllImport("kernel32.dll",SetLastError=true)] static extern bool GetFileInformationByHandle(SafeFileHandle handle,out Info info);
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] public static extern bool CreateHardLink(string link,string target,IntPtr security);
  public static void CreatePrivateDirectory(string path,string sddl) {
@@ -29,6 +30,14 @@ public static class DurebakProbe {
    if(handle.IsInvalid)throw new Win32Exception();Info info;
    if(!GetFileInformationByHandle(handle,out info))throw new Win32Exception();return info;
   }
+ }
+ public static void CreatePrivateFile(string path,string sddl) {
+  IntPtr pointer; uint size;
+  if(!ConvertStringSecurityDescriptorToSecurityDescriptor(sddl,1,out pointer,out size))throw new Win32Exception();
+  try {
+   var sa=new SA {length=Marshal.SizeOf(typeof(SA)),descriptor=pointer};
+   using(var handle=CreatePrivateFileNative(path,0x40000000,0,ref sa,1,0x80,IntPtr.Zero)) {if(handle.IsInvalid)throw new Win32Exception();}
+  } finally {LocalFree(pointer);}
  }
 }
 '@
@@ -62,6 +71,10 @@ try {
  $stage='inspect_private_directory'
  Record 'atomic_private_directory' (IsPrivate $root $true)
  $stage='private_file'; $private=Join-Path $root 'private.txt'
+ [System.IO.File]::WriteAllText($private,'synthetic')
+ $inheritedFilePrivate=IsPrivate $private
+ [System.IO.File]::Delete($private)
+ [DurebakProbe]::CreatePrivateFile($private,$sddl)
  [System.IO.File]::WriteAllText($private,'synthetic')
  Record 'private_file' (IsPrivate $private)
  $stage='broad_allow'; $broad=Join-Path $root 'broad'
@@ -123,7 +136,7 @@ try {
   foreach($ace in $raw.DiscretionaryAcl){if($ace -isnot [System.Security.AccessControl.CommonAce] -or $ace.IsCallback -or $ace.AceQualifier -ne [System.Security.AccessControl.AceQualifier]::AccessAllowed -or $ace.SecurityIdentifier.Value -notin @($sid,'S-1-5-18','S-1-5-32-544')){$sidecarsPrivate=$false}}
  }
  $stage='filesystem_query'
- $report=[pscustomobject]@{status='probe_only';cases=@($cases.ToArray());sqlite_sidecars_private=$sidecarsPrivate;helper_delivery='undecided';filesystem=([System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($root))).DriveFormat}
+ $report=[pscustomobject]@{status='probe_only';cases=@($cases.ToArray());inherited_file_private=$inheritedFilePrivate;sqlite_sidecars_private=$sidecarsPrivate;helper_delivery='undecided';filesystem=([System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($root))).DriveFormat}
  ConvertTo-Json -Depth 5 -Compress -InputObject $report
 } catch { $cause=$_.Exception;while($null -ne $cause.InnerException){$cause=$cause.InnerException};$code=$cause.HResult;if($cause -is [System.ComponentModel.Win32Exception]){$code=$cause.NativeErrorCode};$category=$_.CategoryInfo.Category.ToString().ToLowerInvariant();$errorId=$_.FullyQualifiedErrorId;if($errorId -notmatch '^[a-zA-Z0-9_.,]+$'){$errorId='redacted'};ConvertTo-Json -Compress -InputObject @{status='failed';stage=$stage;error_code=$code;error_type=$cause.GetType().Name.ToLowerInvariant();error_category=$category;error_id=$errorId};exit 1 }
 finally {if(Test-Path -LiteralPath $root){if(Test-Path -LiteralPath (Join-Path $root 'junction')){[System.IO.Directory]::Delete((Join-Path $root 'junction'))};Remove-Item -LiteralPath $root -Recurse -Force}}
