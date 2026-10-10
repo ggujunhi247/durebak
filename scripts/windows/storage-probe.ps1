@@ -111,7 +111,9 @@ try {
  $stage='sqlite_child'
  $rowsText=& $NodeExecutable --no-warnings $nodeScript $root $powershell $observerScript
  if($LASTEXITCODE -ne 0){throw 'sqlite_fixture_failed'}
- $stage='sqlite_json'; $rows=@(($rowsText -join '') | ConvertFrom-Json)
+ # Windows PowerShell5 emits a JSON array as one pipeline item. Assign the
+ # decoded value directly so foreach sees the three descriptors individually.
+ $stage='sqlite_json'; $rows=ConvertFrom-Json -InputObject ($rowsText -join '')
  Record 'sqlite_sidecars_observed' ($rows.Count -eq 3 -and @($rows | Where-Object {!$_.exists}).Count -eq 0)
  $sidecarsPrivate=$true
  foreach($row in $rows){
