@@ -56,6 +56,7 @@ function IsPrivate([string]$path,[bool]$directory=$false) {
 try {
  $stage='atomic_private_directory'
  [DurebakProbe]::CreatePrivateDirectory($root,$sddl)
+ $stage='inspect_private_directory'
  Record 'atomic_private_directory' (IsPrivate $root $true)
  $stage='private_file'; $private=Join-Path $root 'private.txt'
  [System.IO.File]::WriteAllText($private,'synthetic')
@@ -116,5 +117,5 @@ try {
  }
  $report=[pscustomobject]@{status='probe_only';cases=@($cases.ToArray());sqlite_sidecars_private=$sidecarsPrivate;helper_delivery='undecided';filesystem=([System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($root))).DriveFormat}
  ConvertTo-Json -Depth 5 -Compress -InputObject $report
-} catch { ConvertTo-Json -Compress -InputObject @{status='failed';stage=$stage;error_code=$_.Exception.HResult};exit 1 }
+} catch { $cause=$_.Exception;while($null -ne $cause.InnerException){$cause=$cause.InnerException};$code=$cause.HResult;if($cause -is [System.ComponentModel.Win32Exception]){$code=$cause.NativeErrorCode};ConvertTo-Json -Compress -InputObject @{status='failed';stage=$stage;error_code=$code};exit 1 }
 finally {if(Test-Path -LiteralPath $root){if(Test-Path -LiteralPath (Join-Path $root 'junction')){[System.IO.Directory]::Delete((Join-Path $root 'junction'))};Remove-Item -LiteralPath $root -Recurse -Force}}
