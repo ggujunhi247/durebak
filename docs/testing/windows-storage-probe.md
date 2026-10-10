@@ -8,6 +8,8 @@ The probe creates a unique synthetic directory with a Win32 creation-time securi
 
 Public output excludes paths and user SIDs. `cross_user_access` and `desktop_validation` remain `not_tested`; `helper_delivery` remains `undecided`. Do not use a green probe job as proof of these missing gates. This uses runtime compilation exclusively for investigation; no helper, compiler or PowerShell requirement is added to the published product.
 
+The launcher validates helper JSON before reporting it. It requires the complete set of unique investigation cases and boolean observations, emits only allowlisted fields, and converts malformed output into a bounded `probe_report_invalid` failure. Unexpected fields are discarded, including nested case metadata. Failure diagnostics also limit label length and omit raw exception text. These output checks run on every CI platform and alongside the real probe on Windows.
+
 Further gates before implementing Windows storage support: actual access denial from a second nonprivileged user, file-replacement races, privilege-free foreign-owner fixtures, Windows11 x64 desktop validation, production helper delivery/integrity and package review. UNC/network shares and non-NTFS environments are outside the first support target. Job Object lifecycle and Provider permissions need independent investigation before Managed execution.
 
 Primary references:
