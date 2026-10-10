@@ -108,16 +108,19 @@ try {
 '@
  [System.IO.File]::WriteAllText($nodeScript,$javascript)
  $powershell=Join-Path $PSHOME 'powershell.exe'
+ $stage='sqlite_child'
  $rowsText=& $NodeExecutable --no-warnings $nodeScript $root $powershell $observerScript
  if($LASTEXITCODE -ne 0){throw 'sqlite_fixture_failed'}
- $rows=@(($rowsText -join '') | ConvertFrom-Json)
+ $stage='sqlite_json'; $rows=@(($rowsText -join '') | ConvertFrom-Json)
  Record 'sqlite_sidecars_observed' ($rows.Count -eq 3 -and @($rows | Where-Object {!$_.exists}).Count -eq 0)
  $sidecarsPrivate=$true
  foreach($row in $rows){
+  $stage='sqlite_descriptor_decode'
   $raw=[System.Security.AccessControl.RawSecurityDescriptor]::new($row.sddl)
   if($raw.Owner.Value -ne $sid -or $null -eq $raw.DiscretionaryAcl){$sidecarsPrivate=$false;continue}
   foreach($ace in $raw.DiscretionaryAcl){if($ace -isnot [System.Security.AccessControl.CommonAce] -or $ace.IsCallback -or $ace.AceQualifier -ne [System.Security.AccessControl.AceQualifier]::AccessAllowed -or $ace.SecurityIdentifier.Value -notin @($sid,'S-1-5-18','S-1-5-32-544')){$sidecarsPrivate=$false}}
  }
+ $stage='filesystem_query'
  $report=[pscustomobject]@{status='probe_only';cases=@($cases.ToArray());sqlite_sidecars_private=$sidecarsPrivate;helper_delivery='undecided';filesystem=([System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($root))).DriveFormat}
  ConvertTo-Json -Depth 5 -Compress -InputObject $report
 } catch { $cause=$_.Exception;while($null -ne $cause.InnerException){$cause=$cause.InnerException};$code=$cause.HResult;if($cause -is [System.ComponentModel.Win32Exception]){$code=$cause.NativeErrorCode};$category=$_.CategoryInfo.Category.ToString().ToLowerInvariant();$errorId=$_.FullyQualifiedErrorId;if($errorId -notmatch '^[a-zA-Z0-9_.,]+$'){$errorId='redacted'};ConvertTo-Json -Compress -InputObject @{status='failed';stage=$stage;error_code=$code;error_type=$cause.GetType().Name.ToLowerInvariant();error_category=$category;error_id=$errorId};exit 1 }
