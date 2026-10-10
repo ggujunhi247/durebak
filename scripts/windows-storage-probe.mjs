@@ -12,7 +12,7 @@ const result=spawnSync(shell,['-NoLogo','-NoProfile','-NonInteractive','-File',f
 if(result.error||result.status!==0){
  // PowerShell errors may contain local paths; keep public diagnostics bounded.
  let detail={};
- try{const parsed=JSON.parse(result.stdout.trim());if(typeof parsed.stage==='string'&&/^[a-z_]+$/.test(parsed.stage))detail.stage=parsed.stage;if(typeof parsed.error_type==='string'&&/^[a-z]+$/.test(parsed.error_type))detail.error_type=parsed.error_type;if(Number.isInteger(parsed.error_code))detail.error_code=parsed.error_code;}catch{}
+ try{const parsed=JSON.parse(result.stdout.trim());if(typeof parsed.stage==='string'&&/^[a-z_]+$/.test(parsed.stage))detail.stage=parsed.stage;if(typeof parsed.error_type==='string'&&/^[a-z]+$/.test(parsed.error_type))detail.error_type=parsed.error_type;if(typeof parsed.error_category==='string'&&/^[a-z]+$/.test(parsed.error_category))detail.error_category=parsed.error_category;if(typeof parsed.error_id==='string'&&/^[a-zA-Z0-9_.,]+$/.test(parsed.error_id))detail.error_id=parsed.error_id;if(Number.isInteger(parsed.error_code))detail.error_code=parsed.error_code;}catch{}
  console.log(JSON.stringify({status:'failed',reason:result.error?'probe_process_failed':'probe_failed',...detail,platform:'win32',arch:process.arch,product_support:false}));
  process.exit(1);
 }
