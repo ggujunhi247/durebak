@@ -38,13 +38,16 @@ $root=Join-Path ([System.IO.Path]::GetTempPath()) ('durebak-win-probe-'+[guid]::
 $cases=New-Object System.Collections.Generic.List[object]
 function Record([string]$id,[bool]$passed) { $cases.Add([pscustomobject]@{id=$id;passed=$passed}) }
 function IsPrivate([string]$path,[bool]$directory=$false) {
+ $script:stage='identity_query'
  $identity=[DurebakProbe]::Identity($path)
  if(($identity.attributes -band 0x400) -ne 0){return $false}
  if((($identity.attributes -band 0x10) -ne 0) -ne $directory){return $false}
  if(!$directory -and $identity.links -ne 1){return $false}
- $acl=Get-Acl -LiteralPath $path
+ $script:stage='acl_query'; $acl=Get-Acl -LiteralPath $path
+ $script:stage='owner_query'
  if($acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne $sid){return $false}
- $raw=[System.Security.AccessControl.RawSecurityDescriptor]::new($acl.GetSecurityDescriptorBinaryForm(),0)
+ $script:stage='descriptor_decode'; $raw=[System.Security.AccessControl.RawSecurityDescriptor]::new($acl.GetSecurityDescriptorBinaryForm(),0)
+ $script:stage='ace_inspection'
  if($null -eq $raw.DiscretionaryAcl -or $raw.DiscretionaryAcl.Count -eq 0){return $false}
  foreach($ace in $raw.DiscretionaryAcl){
   if($ace -isnot [System.Security.AccessControl.CommonAce] -or $ace.IsCallback){return $false}
@@ -117,5 +120,5 @@ try {
  }
  $report=[pscustomobject]@{status='probe_only';cases=@($cases.ToArray());sqlite_sidecars_private=$sidecarsPrivate;helper_delivery='undecided';filesystem=([System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($root))).DriveFormat}
  ConvertTo-Json -Depth 5 -Compress -InputObject $report
-} catch { $cause=$_.Exception;while($null -ne $cause.InnerException){$cause=$cause.InnerException};$code=$cause.HResult;if($cause -is [System.ComponentModel.Win32Exception]){$code=$cause.NativeErrorCode};ConvertTo-Json -Compress -InputObject @{status='failed';stage=$stage;error_code=$code};exit 1 }
+} catch { $cause=$_.Exception;while($null -ne $cause.InnerException){$cause=$cause.InnerException};$code=$cause.HResult;if($cause -is [System.ComponentModel.Win32Exception]){$code=$cause.NativeErrorCode};ConvertTo-Json -Compress -InputObject @{status='failed';stage=$stage;error_code=$code;error_type=$cause.GetType().Name.ToLowerInvariant()};exit 1 }
 finally {if(Test-Path -LiteralPath $root){if(Test-Path -LiteralPath (Join-Path $root 'junction')){[System.IO.Directory]::Delete((Join-Path $root 'junction'))};Remove-Item -LiteralPath $root -Recurse -Force}}
