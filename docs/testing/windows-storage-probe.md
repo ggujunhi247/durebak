@@ -15,3 +15,6 @@ Primary references:
 - [Microsoft file security and access rights](https://learn.microsoft.com/en-us/windows/win32/fileio/file-security-and-access-rights)
 - [Node process.geteuid](https://nodejs.org/api/process.html#processgeteuid)
 - [Microsoft Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
+- [PowerShell module-path inheritance through intermediate processes](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_psmodulepath)
+
+The probe pins `PSModulePath` to its selected Windows PowerShell installation. A PowerShell7 → Node → Windows PowerShell5 chain otherwise inherits incompatible shared module paths; the initial Windows CI exposed `CouldNotAutoloadMatchingModule` while querying ACLs. This is a probe launcher fix, not a relaxation of ACL policy.
