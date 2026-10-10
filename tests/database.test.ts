@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,rmSync,writeFileSync,readFileSync,linkSync,symlinkSync,chmodSync,lstatSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,rmSync,writeFileSync,readFileSync,linkSync,symlinkSync,chmodSync,lstatSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {openDatabase,privateDirectory} from '../src/database.js';
@@ -10,6 +10,24 @@ function fixture(t:test.TestContext){
  t.after(()=>rmSync(root,{recursive:true,force:true}));mkdirSync(directory,{mode:0o700});
  return {root,directory,file:join(directory,'runtime.sqlite')};
 }
+
+test('storage without OS user identity is refused before creating a directory',t=>{
+ const f=fixture(t),newDirectory=join(f.root,'new-data');
+ const descriptor=Object.getOwnPropertyDescriptor(process,'geteuid')!;
+ t.after(()=>Object.defineProperty(process,'geteuid',descriptor));
+ Object.defineProperty(process,'geteuid',{...descriptor,value:undefined});
+ assert.throws(()=>openDatabase(newDirectory),/unsupported_storage_platform/);
+ assert.equal(existsSync(newDirectory),false);
+});
+
+test('storage without OS user identity leaves existing database unchanged',t=>{
+ const f=fixture(t);openDatabase(f.directory).close();const before=readFileSync(f.file);
+ const descriptor=Object.getOwnPropertyDescriptor(process,'geteuid')!;
+ t.after(()=>Object.defineProperty(process,'geteuid',descriptor));
+ Object.defineProperty(process,'geteuid',{...descriptor,value:undefined});
+ assert.throws(()=>openDatabase(f.directory),/unsupported_storage_platform/);
+ assert.deepEqual(readFileSync(f.file),before);
+});
 
 test('linked database is refused before modifying its external alias',t=>{
  const f=fixture(t),outside=join(f.root,'outside');writeFileSync(outside,'private fixture',{mode:0o600});linkSync(outside,f.file);

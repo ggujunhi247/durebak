@@ -289,3 +289,7 @@ The runtime refuses a non-private or foreign-owner data directory and unsafe mai
 ## Queue metadata polling (alpha.22)
 
 Queue maintenance and status summaries select only the metadata required for expiry, retry and availability, avoiding unnecessary JavaScript message-body materialization. Delivery content and all authentication/transaction/file-protection gates remain unchanged. A deterministic real-SQLite payload-loading regression preserves counts and expiry while requiring zero body bytes on the polling path. A synthetic reproducible benchmark and the observed same-machine comparison are documented in PERFORMANCE.md; they do not establish general/provider latency or change native execution/wake support.
+
+## Platform refusal and maintenance (alpha.23)
+
+Storage requires an OS effective-user identity. Platforms without `process.geteuid` are refused with `unsupported_storage_platform` before directory or database creation. Existing data is left unchanged. This is an explicit unsupported-platform boundary, not a Windows ACL implementation. The separate Windows investigation and its sanitized report are described in [the probe guide](testing/windows-storage-probe.md); full Windows support remains pending. MCP SDK 1.32.1 is pinned, with no schema or protocol change.
