@@ -11,7 +11,9 @@ const shell=join(process.env.SystemRoot??'C:\\Windows','System32','WindowsPowerS
 const result=spawnSync(shell,['-NoLogo','-NoProfile','-NonInteractive','-File',fileURLToPath(new URL('./windows/storage-probe.ps1',import.meta.url)),'-NodeExecutable',process.execPath],{encoding:'utf8',timeout:45000,maxBuffer:131072,windowsHide:true});
 if(result.error||result.status!==0){
  // PowerShell errors may contain local paths; keep public diagnostics bounded.
- console.log(JSON.stringify({status:'failed',reason:result.error?'probe_process_failed':'probe_failed',platform:'win32',arch:process.arch,product_support:false}));
+ let detail={};
+ try{const parsed=JSON.parse(result.stdout.trim());if(typeof parsed.stage==='string'&&/^[a-z_]+$/.test(parsed.stage))detail.stage=parsed.stage;if(Number.isInteger(parsed.error_code))detail.error_code=parsed.error_code;}catch{}
+ console.log(JSON.stringify({status:'failed',reason:result.error?'probe_process_failed':'probe_failed',...detail,platform:'win32',arch:process.arch,product_support:false}));
  process.exit(1);
 }
 const evidence=JSON.parse(result.stdout.trim().replace(/^\uFEFF/,''));

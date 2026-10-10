@@ -54,31 +54,32 @@ function IsPrivate([string]$path,[bool]$directory=$false) {
  return $true
 }
 try {
+ $stage='atomic_private_directory'
  [DurebakProbe]::CreatePrivateDirectory($root,$sddl)
  Record 'atomic_private_directory' (IsPrivate $root $true)
- $private=Join-Path $root 'private.txt'
+ $stage='private_file'; $private=Join-Path $root 'private.txt'
  [System.IO.File]::WriteAllText($private,'synthetic')
  Record 'private_file' (IsPrivate $private)
- $broad=Join-Path $root 'broad'
+ $stage='broad_allow'; $broad=Join-Path $root 'broad'
  [DurebakProbe]::CreatePrivateDirectory($broad,"O:${sid}G:${sid}D:P(A;OICI;FA;;;${sid})(A;OICI;FR;;;WD)")
  Record 'broad_allow_rejected' (!(IsPrivate $broad $true))
- $nullDacl=Join-Path $root 'null-dacl'
+ $stage='null_dacl'; $nullDacl=Join-Path $root 'null-dacl'
  [DurebakProbe]::CreatePrivateDirectory($nullDacl,"O:${sid}G:${sid}D:NO_ACCESS_CONTROL")
  Record 'null_dacl_rejected' (!(IsPrivate $nullDacl $true))
- $foreign=Join-Path $root 'foreign'
+ $stage='foreign_owner'; $foreign=Join-Path $root 'foreign'
  # Administrators ownership is distinct from the actual token user SID.
  [DurebakProbe]::CreatePrivateDirectory($foreign,"O:BAG:${sid}D:P(A;OICI;FA;;;${sid})(A;OICI;FA;;;BA)")
  Record 'foreign_owner_rejected' (!(IsPrivate $foreign $true))
- $junction=Join-Path $root 'junction'
+ $stage='junction'; $junction=Join-Path $root 'junction'
  New-Item -ItemType Junction -Path $junction -Target $broad | Out-Null
  Record 'junction_rejected' (!(IsPrivate $junction $true))
  # Remove the alias itself; never recursively traverse a junction during cleanup.
  [System.IO.Directory]::Delete($junction)
- $hardlink=Join-Path $root 'hardlink.txt'
+ $stage='hardlink'; $hardlink=Join-Path $root 'hardlink.txt'
  if(![DurebakProbe]::CreateHardLink($hardlink,$private,[IntPtr]::Zero)){throw 'hardlink_fixture_failed'}
  Record 'hardlink_rejected' (!(IsPrivate $hardlink) -and !(IsPrivate $private))
  [System.IO.File]::Delete($hardlink)
- $nodeScript=Join-Path $root 'sqlite-probe.cjs'
+ $stage='sqlite'; $nodeScript=Join-Path $root 'sqlite-probe.cjs'
  $observerScript=Join-Path $root 'observe-sidecars.ps1'
  [System.IO.File]::WriteAllText($observerScript,@'
 param([string]$DatabaseFile)
@@ -115,5 +116,5 @@ try {
  }
  $report=[pscustomobject]@{status='probe_only';cases=@($cases.ToArray());sqlite_sidecars_private=$sidecarsPrivate;helper_delivery='undecided';filesystem=([System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($root))).DriveFormat}
  ConvertTo-Json -Depth 5 -Compress -InputObject $report
-} catch { [Console]::Error.WriteLine('windows_storage_probe_failed');exit 1 }
+} catch { ConvertTo-Json -Compress -InputObject @{status='failed';stage=$stage;error_code=$_.Exception.HResult};exit 1 }
 finally {if(Test-Path -LiteralPath $root){if(Test-Path -LiteralPath (Join-Path $root 'junction')){[System.IO.Directory]::Delete((Join-Path $root 'junction'))};Remove-Item -LiteralPath $root -Recurse -Force}}

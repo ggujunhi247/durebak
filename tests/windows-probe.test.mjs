@@ -11,7 +11,7 @@ test('Windows storage probe refuses non-Windows execution without fabricating ev
 });
 test('Windows storage probe records actual ACL and SQLite cases',{skip:process.platform!=='win32',timeout:60000},()=>{
  const result=spawnSync(process.execPath,[fileURLToPath(script)],{encoding:'utf8',timeout:55000});
- assert.equal(result.status,0,result.stderr);
+ assert.equal(result.status,0,result.stdout);
  const report=JSON.parse(result.stdout);
  assert.equal(report.platform,'win32');
  assert.equal(report.arch,process.arch);
