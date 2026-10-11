@@ -84,6 +84,27 @@ GitHub 릴리스 알림은 그 릴리스가 게시됐다는 뜻입니다. npm �
 
 수동 확인은 `durebak --version`과 `npm view durebak@alpha version --registry=https://registry.npmjs.org`를 비교하면 됩니다. 두 버전이 다르다는 이유만으로 업데이트 가능한 것은 아닙니다. 현재 버전이 채널보다 앞설 수도 있습니다.
 
-제품 내 새 버전 확인·알림과 자동 적용은 [업데이트 설계](UPDATE-DESIGN.md)에 정의한 후속 기능입니다. 이 설계는 설치 방식별 자동 적용·작업 중 보류·실패 복구까지 포함하며 현재 사용 가능한 명령과 구분합니다. 현재 CLI에는 `update-check` 또는 `update` 명령이 없으며 백그라운드 검사나 예약 작업을 설치하지 않습니다.
+## 개발 소스의 제품 내 업데이트 확인·알림
+
+아래 명령은 현재 개발 소스에 구현되어 있으며 **기존 alpha.23 배포 파일에는 포함되지 않습니다**. 새 버전 확인·알림·정책을 제공하며 설치 파일을 변경하지 않습니다. 자동 설치/rollback은 아직 구현되지 않았습니다.
+
+```sh
+durebak update-check --channel alpha
+durebak update status
+durebak update enable --mode notify --channel alpha
+durebak update pin 0.1.0-alpha.23
+durebak update unpin
+durebak update disable
+```
+
+`update-check`는 npm과 GitHub를 따로 조회하여 현재 버전·후보·게시 여부를 JSON으로 표시합니다. `installed_ahead`는 설치 버전이 해당 배포처보다 높다는 뜻이며 downgrade를 제안하지 않습니다. GitHub는 최대50개 최신 릴리스를 확인하고, 선택 채널을 찾지 못하면 `unavailable`입니다. 설치 소유자는 아직 검증하지 못하므로 임의 전역 설치 명령을 생성하지 않고 이 안내 링크를 제공합니다.
+
+기본 정책은 disabled입니다. `enable --mode notify`를 명시하면 macOS launchd 또는 Linux systemd 사용자 예약을 등록합니다. Linux에는 실행 중인 systemd user manager가 필요하고 macOS에는 로그인한 GUI 세션이 필요합니다. root/SYSTEM 예약은 거부합니다. worker가 분 단위로 깨어나도 네트워크 검사는 1시간 간격이며 disabled 상태에서는 조회하지 않습니다. Windows 예약은 지원하지 않습니다.
+
+정책과 최근 결과는 runtime DB와 분리된 `~/.durebak-updater`에 private 권한으로 저장합니다. 별도 정책 root는 각 명령에 같은 `--update-dir PATH`를 지정합니다. 대화형 CLI의 자동 알림은 기본 root의 캐시만 읽으며, 사용자 지정 root의 결과는 해당 root의 `update status`로 확인합니다. 기본 CLI 실행과 status는 네트워크를 조회하지 않고 MCP/stdout JSON에는 알림을 넣지 않습니다. 알림은 TTY stderr에서 한 번 표시합니다. 터미널이 없을 때는 status로 확인합니다.
+
+`pin`은 후보 상태를 pinned로 표시하고 새 버전 알림을 중지합니다. `disable`은 정책부터 중지한 뒤 소유가 확인되는 예약만 제거합니다. 예약 파일이 외부에서 수정되면 덮어쓰거나 삭제하지 않고 conflict를 반환합니다. 제거 실패여도 disabled 정책은 유지합니다. 알림을 다시 켜면 소유한 예약 파일을 재검사·등록합니다.
+
+`update enable --mode auto`와 `update apply --version VERSION`은 `automatic_apply_not_configured`로 차단됩니다. `update status`의 `apply_blockers`는 운영 서명 키, 설치 소유자, maintenance gate, 독립 복구 worker 부재를 표시합니다. 자동 설치·DB 관문·실패 복구와 Windows 설치기는 [업데이트 설계](UPDATE-DESIGN.md)의 남은 구현 범위입니다. 테스트용 서명 검증 성공을 운영 자동 적용 지원으로 보지 않습니다.
 
 공식 npm 명령 참고: [npm install](https://docs.npmjs.com/cli/v11/commands/npm-install/), [npm view](https://docs.npmjs.com/cli/v11/commands/npm-view/).

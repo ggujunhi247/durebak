@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add session-independent update discovery, numeric release/channel comparison and separate npm/GitHub availability reports. Fixed HTTPS sources, bounded responses and pagination; no remote commands or automatic downgrades.
+- Add opt-in private notification policy, pin/disable/status and hourly notification workers scheduled through macOS launchd/Linux systemd user services. Default CLI remains offline; notices use cached TTY stderr and preserve MCP/JSON output.
+- Use process-crash-safe SQLite coordination, discard worker results after policy changes, reconcile notification schedules on enable, and suppress stale notices after manual upgrades.
+- Add Ed25519 release-envelope verification and explicit automatic-apply blockers. Operational signing, owner detection, maintenance fence, automatic installation and independent rollback/recovery remain unimplemented; Windows product support remains blocked.
+
 ## 0.1.0-alpha.23 — 2026-10-11
 
 - Update the pinned MCP SDK from 1.30.1 to 1.32.1 to resolve GHSA-6qxp-vccf-f47h. The advisory excludes the stdio client/server use in this alpha.

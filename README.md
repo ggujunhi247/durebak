@@ -8,7 +8,7 @@ Local, durable collaboration between coding-agent sessions. Experimental alpha f
 
 **현재 소스: 0.1.0-alpha.23. 사용자용 협업은 Cooperative 모드입니다.** SQLite 저장소, 인증된 loopback 서버, CLI, MCP stdio bridge가 구현되어 있습니다. 실제 MCP 프로세스 간 통신을 테스트했으며, 호스트별 실제 시험 결과와 제약은 [호스트 테스트](docs/HOST-TESTING.md)에 기록합니다. 요청별 대화·기한·취소 notice·checkpoint, 공유 preview, 보호 작업·비공개 텍스트 첨부, revision별 자기보고 검증·재검증과 CLI 협업 화면을 제공합니다. 내부 실험용 Codex·OpenCode 소유 호스트와 실행 ledger, 비동기 준비 상태 검사도 개발 중입니다. 이 내부 구성의 실제 모델 실행·controller 연결·자동 깨우기는 아직 검증하지 않았습니다. 자동 세션 실행·깨우기와 반복 작업 스케줄러는 후속 기능입니다.
 
-npm·GitHub 배포 파일의 설치/업데이트 경로와 새 버전 알림 구독은 [설치·업데이트 안내](https://github.com/ggujunhi247/durebak/blob/main/docs/INSTALLATION.md)를 참고하세요.
+npm·GitHub 설치/업데이트 경로, 릴리스 구독과 개발 소스의 `update-check`·opt-in 알림은 [설치·업데이트 안내](https://github.com/ggujunhi247/durebak/blob/main/docs/INSTALLATION.md)를 참고하세요.
 
 ## 시작하기
 
