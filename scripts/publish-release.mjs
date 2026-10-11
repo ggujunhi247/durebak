@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {resolve} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
 
 export function channelForTag(tag) {
@@ -14,10 +15,19 @@ export function assertRegistryArtifact(bytes,dist) {
  if(typeof dist?.integrity!=='string'||!dist.integrity.startsWith('sha512-'))throw new Error('registry_integrity_required');
  if(dist.integrity!==`sha512-${createHash('sha512').update(bytes).digest('base64')}`)throw new Error('registry_artifact_mismatch');
 }
-export async function publishVerified({bytes,readDist,publish,download}) {
+export async function publishVerified({bytes,readDist,publish,download,wait=delay}) {
  let dist=await readDist();
  const existed=dist!==null;
- if(!existed){await publish();dist=await readDist();}
+ if(!existed){
+  await publish();
+  // npm may accept a release before its metadata becomes publicly visible.
+  // Retry reads only; never submit another publish within this attempt.
+  for(let attempt=0;attempt<30;attempt++){
+   if(attempt>0)await wait(10000);
+   dist=await readDist();
+   if(dist!==null)break;
+  }
+ }
  if(dist===null)throw new Error('registry_version_missing');
  assertRegistryArtifact(bytes,dist);
  if(!bytes.equals(await download(dist.tarball)))throw new Error('registry_tarball_mismatch');

@@ -25,10 +25,29 @@ test('new publication verifies metadata and downloaded bytes after publish',asyn
  let reads=0,publishes=0;
  const result=await publishVerified({bytes,readDist:async()=>++reads===1?null:dist,publish:async()=>publishes++,download:async()=>bytes});
  assert.equal(result,'published');assert.equal(publishes,1);
- await assert.rejects(publishVerified({bytes,readDist:async()=>null,publish:async()=>{},download:async()=>bytes}),/registry_version_missing/);
+ await assert.rejects(publishVerified({bytes,readDist:async()=>null,publish:async()=>{},download:async()=>bytes,wait:async()=>{}}),/registry_version_missing/);
 });
 test('registry outages stop publication instead of being treated as a missing version',async()=>{
  let publishes=0;
  await assert.rejects(publishVerified({bytes,readDist:async()=>{throw new Error('network_failure');},publish:async()=>publishes++,download:async()=>bytes}),/network_failure/);
  assert.equal(publishes,0);
+});
+
+test('accepted publication waits for registry visibility without publishing twice',async()=>{
+ let reads=0,publishes=0,waits=0;
+ const result=await publishVerified({bytes,
+  readDist:async()=>++reads<4?null:dist,
+  publish:async()=>publishes++,download:async()=>bytes,wait:async()=>waits++});
+ assert.equal(result,'published');assert.equal(publishes,1);assert.equal(waits,2);
+});
+test('registry visibility deadline fails closed without another publication',async()=>{
+ let reads=0,publishes=0,waits=0,downloads=0;
+ await assert.rejects(publishVerified({bytes,readDist:async()=>{reads++;return null;},
+  publish:async()=>publishes++,download:async()=>{downloads++;return bytes;},wait:async()=>waits++}),/registry_version_missing/);
+ assert.equal(reads,31);assert.equal(waits,29);assert.equal(publishes,1);assert.equal(downloads,0);
+});
+test('delayed registry visibility still rejects a different artifact',async()=>{
+ let reads=0;
+ await assert.rejects(publishVerified({bytes,readDist:async()=>++reads<3?null:{...dist,integrity:'sha512-wrong'},
+  publish:async()=>{},download:async()=>bytes,wait:async()=>{}}),/registry_artifact_mismatch/);
 });
