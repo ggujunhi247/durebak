@@ -2,7 +2,7 @@ import {parseArgs} from 'node:util';
 import {inspectTarball} from './lib/package-check.mjs';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtempSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { once } from 'node:events';
@@ -21,6 +21,16 @@ try {
   const cli=join(install,'node_modules',manifest.name,'dist','cli.js');
   const command=(...args)=>exec(process.execPath,[cli,...args],{timeout:15000});
   assert.equal((await command('--version')).stdout.trim(),manifest.version);
+  const updateDirectory=join(directory,'update policy 한글');
+  const updateStatus=JSON.parse((await command('update','status','--update-dir',updateDirectory)).stdout);
+  assert.equal(updateStatus.current,manifest.version);assert.equal(updateStatus.mode,'disabled');assert.equal(updateStatus.automatic_apply,false);
+  assert.ok(updateStatus.apply_blockers.includes('release_trust_not_configured'));
+  assert.deepEqual(JSON.parse((await command('update','worker','--update-dir',updateDirectory)).stdout),{checked:false,notice:false});
+  await assert.rejects(command('update','apply','--version',manifest.version,'--update-dir',updateDirectory),error=>{
+    assert.deepEqual(JSON.parse(error.stderr),{error:'automatic_apply_not_configured'});return true;
+  });
+  assert.equal(existsSync(updateDirectory),false);
+
   const skillProject=join(directory,'skill-project');mkdirSync(skillProject);
   const skills=JSON.parse((await command('skills','--harness','all','--workspace',skillProject)).stdout);assert.equal(skills.created.length,5);assert.equal(skills.auto_wake,false);
   assert.ok(readFileSync(join(skillProject,'.agents/skills/durebak/SKILL.md'),'utf8').startsWith('---\nname: durebak\n'));
@@ -41,7 +51,7 @@ try {
   await new Promise(resolve=>setTimeout(resolve,5100));
   const inbox=JSON.parse((await command('call','receive','--session',file)).stdout);
   assert.equal(inbox.items[0].body,'Installed package works');
-  console.log(JSON.stringify({status:'passed',...artifact,checks:['version','skills','daemon','registration','doctor','setup','send','receive']}));
+  console.log(JSON.stringify({status:'passed',...artifact,checks:['version','update-status','update-guards','skills','daemon','registration','doctor','setup','send','receive']}));
 } finally {
   if(daemon && daemon.exitCode===null && daemon.signalCode===null){const exited=once(daemon,'exit');daemon.kill('SIGTERM');await exited;}
   rmSync(directory,{recursive:true,force:true});

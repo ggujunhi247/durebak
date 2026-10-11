@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.24 — 2026-10-11
 
 - Add session-independent update discovery, numeric release/channel comparison and separate npm/GitHub availability reports. Fixed HTTPS sources, bounded responses and pagination; no remote commands or automatic downgrades.
 - Add opt-in private notification policy, pin/disable/status and hourly notification workers scheduled through macOS launchd/Linux systemd user services. Default CLI remains offline; notices use cached TTY stderr and preserve MCP/JSON output.
