@@ -1,5 +1,6 @@
 // Only allow bounded investigation evidence into public CI output.
-const caseIds=new Set(['atomic_private_directory','private_file','broad_allow_rejected','null_dacl_rejected','foreign_owner_rejected','junction_rejected','hardlink_rejected','sqlite_sidecars_observed']);
+const caseIds=new Set(['atomic_private_directory','private_file','broad_allow_rejected','null_dacl_rejected','foreign_owner_rejected','junction_rejected','hardlink_rejected','sqlite_sidecars_observed','exclusive_create_preserves_existing','replacement_changes_identity']);
+const ownerObservations=['token_owner_is_user','inherited_owner_is_user','inherited_owner_matches_token_owner','sqlite_owners_match_token_owner'];
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const label=(value,pattern)=>typeof value==='string'&&value.length<=80&&pattern.test(value);
 export function sanitizeProbeResult(result,metadata) {
@@ -20,9 +21,11 @@ export function sanitizeProbeResult(result,metadata) {
   parsed.cases.some(item=>!object(item)||!caseIds.has(item.id)||typeof item.passed!=='boolean')||
   new Set(parsed.cases.map(item=>item.id)).size!==caseIds.size||
   typeof parsed.inherited_file_private!=='boolean'||typeof parsed.sqlite_sidecars_private!=='boolean'||
+  ownerObservations.some(key=>typeof parsed[key]!=='boolean')||
   parsed.helper_delivery!=='undecided'||!['NTFS','ReFS','FAT','FAT32','exFAT','UDF'].includes(parsed.filesystem))return failure('probe_report_invalid');
  const cases=parsed.cases.map(({id,passed})=>({id,passed}));
  const report={status:'probe_only',cases,inherited_file_private:parsed.inherited_file_private,sqlite_sidecars_private:parsed.sqlite_sidecars_private,
+  ...Object.fromEntries(ownerObservations.map(key=>[key,parsed[key]])),
   helper_delivery:'undecided',filesystem:parsed.filesystem,platform:'win32',arch:metadata.arch,os_release:metadata.os_release,node:metadata.node,
   product_support:false,cross_user_access:'not_tested',desktop_validation:'not_tested'};
  return {report,exitCode:cases.some(item=>!item.passed)?1:0};

@@ -41,9 +41,12 @@ public static class DurebakProbe {
  }
 }
 '@
-$sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$token=[System.Security.Principal.WindowsIdentity]::GetCurrent()
+$sid=$token.User.Value
+$tokenOwner=$token.Owner.Value
+$tokenOwnerIsUser=$tokenOwner -eq $sid
 $sddl="O:${sid}G:${sid}D:P(A;OICI;FA;;;${sid})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
-$root=Join-Path ([System.IO.Path]::GetTempPath()) ('durebak-win-probe-'+[guid]::NewGuid().ToString('N'))
+$root=Join-Path ([System.IO.Path]::GetTempPath()) ('durebak-win-probe-'+[char]0xAC80+[char]0xC99D+' '+[guid]::NewGuid().ToString('N'))
 $cases=New-Object System.Collections.Generic.List[object]
 function Record([string]$id,[bool]$passed) { $cases.Add([pscustomobject]@{id=$id;passed=$passed}) }
 function IsPrivate([string]$path,[bool]$directory=$false) {
@@ -73,10 +76,30 @@ try {
  $stage='private_file'; $private=Join-Path $root 'private.txt'
  [System.IO.File]::WriteAllText($private,'synthetic')
  $inheritedFilePrivate=IsPrivate $private
+ $inheritedOwner=(Get-Acl -LiteralPath $private).GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+ $inheritedOwnerIsUser=$inheritedOwner -eq $sid
+ $inheritedOwnerMatchesTokenOwner=$inheritedOwner -eq $tokenOwner
  [System.IO.File]::Delete($private)
  [DurebakProbe]::CreatePrivateFile($private,$sddl)
  [System.IO.File]::WriteAllText($private,'synthetic')
  Record 'private_file' (IsPrivate $private)
+ $stage='exclusive_create'
+ $exclusiveRefused=$false
+ try {[DurebakProbe]::CreatePrivateFile($private,$sddl)}catch {
+  $cause=$_.Exception;while($null -ne $cause.InnerException){$cause=$cause.InnerException}
+  if($cause -isnot [System.ComponentModel.Win32Exception] -or $cause.NativeErrorCode -notin @(80,183)){throw}
+  $exclusiveRefused=$true
+ }
+ Record 'exclusive_create_preserves_existing' ($exclusiveRefused -and [System.IO.File]::ReadAllText($private) -eq 'synthetic')
+ $stage='replacement_identity'
+ $before=[DurebakProbe]::Identity($private)
+ $previous=Join-Path $root 'previous-private.txt'
+ [System.IO.File]::Move($private,$previous)
+ [DurebakProbe]::CreatePrivateFile($private,$sddl)
+ [System.IO.File]::WriteAllText($private,'synthetic')
+ $after=[DurebakProbe]::Identity($private)
+ $changed=$before.volume -ne $after.volume -or $before.indexHigh -ne $after.indexHigh -or $before.indexLow -ne $after.indexLow
+ Record 'replacement_changes_identity' ($changed -and [System.IO.File]::ReadAllText($previous) -eq 'synthetic' -and (IsPrivate $private))
  $stage='broad_allow'; $broad=Join-Path $root 'broad'
  [DurebakProbe]::CreatePrivateDirectory($broad,"O:${sid}G:${sid}D:P(A;OICI;FA;;;${sid})(A;OICI;FR;;;WD)")
  Record 'broad_allow_rejected' (!(IsPrivate $broad $true))
@@ -129,14 +152,16 @@ try {
  $stage='sqlite_json'; $rows=ConvertFrom-Json -InputObject ($rowsText -join '')
  Record 'sqlite_sidecars_observed' ($rows.Count -eq 3 -and @($rows | Where-Object {!$_.exists}).Count -eq 0)
  $sidecarsPrivate=$true
+ $sqliteOwnersMatchTokenOwner=$rows.Count -eq 3
  foreach($row in $rows){
   $stage='sqlite_descriptor_decode'
   $raw=[System.Security.AccessControl.RawSecurityDescriptor]::new($row.sddl)
+  if($raw.Owner.Value -ne $tokenOwner){$sqliteOwnersMatchTokenOwner=$false}
   if($raw.Owner.Value -ne $sid -or $null -eq $raw.DiscretionaryAcl){$sidecarsPrivate=$false;continue}
   foreach($ace in $raw.DiscretionaryAcl){if($ace -isnot [System.Security.AccessControl.CommonAce] -or $ace.IsCallback -or $ace.AceQualifier -ne [System.Security.AccessControl.AceQualifier]::AccessAllowed -or $ace.SecurityIdentifier.Value -notin @($sid,'S-1-5-18','S-1-5-32-544')){$sidecarsPrivate=$false}}
  }
  $stage='filesystem_query'
- $report=[pscustomobject]@{status='probe_only';cases=@($cases.ToArray());inherited_file_private=$inheritedFilePrivate;sqlite_sidecars_private=$sidecarsPrivate;helper_delivery='undecided';filesystem=([System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($root))).DriveFormat}
+ $report=[pscustomobject]@{status='probe_only';cases=@($cases.ToArray());inherited_file_private=$inheritedFilePrivate;sqlite_sidecars_private=$sidecarsPrivate;token_owner_is_user=$tokenOwnerIsUser;inherited_owner_is_user=$inheritedOwnerIsUser;inherited_owner_matches_token_owner=$inheritedOwnerMatchesTokenOwner;sqlite_owners_match_token_owner=$sqliteOwnersMatchTokenOwner;helper_delivery='undecided';filesystem=([System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($root))).DriveFormat}
  ConvertTo-Json -Depth 5 -Compress -InputObject $report
 } catch { $cause=$_.Exception;while($null -ne $cause.InnerException){$cause=$cause.InnerException};$code=$cause.HResult;if($cause -is [System.ComponentModel.Win32Exception]){$code=$cause.NativeErrorCode};$category=$_.CategoryInfo.Category.ToString().ToLowerInvariant();$errorId=$_.FullyQualifiedErrorId;if($errorId -notmatch '^[a-zA-Z0-9_.,]+$'){$errorId='redacted'};ConvertTo-Json -Compress -InputObject @{status='failed';stage=$stage;error_code=$code;error_type=$cause.GetType().Name.ToLowerInvariant();error_category=$category;error_id=$errorId};exit 1 }
 finally {if(Test-Path -LiteralPath $root){if(Test-Path -LiteralPath (Join-Path $root 'junction')){[System.IO.Directory]::Delete((Join-Path $root 'junction'))};Remove-Item -LiteralPath $root -Recurse -Force}}

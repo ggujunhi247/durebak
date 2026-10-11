@@ -18,7 +18,8 @@ test('Windows storage probe records actual ACL and SQLite cases',{skip:process.p
  assert.equal(report.product_support,false);
  assert.equal(typeof report.inherited_file_private,'boolean');
  assert.equal(typeof report.sqlite_sidecars_private,'boolean');
- for(const id of ['atomic_private_directory','private_file','broad_allow_rejected','null_dacl_rejected','foreign_owner_rejected','junction_rejected','hardlink_rejected','sqlite_sidecars_observed']){
+ for(const key of ['token_owner_is_user','inherited_owner_is_user','inherited_owner_matches_token_owner','sqlite_owners_match_token_owner'])assert.equal(typeof report[key],'boolean',key);
+ for(const id of ['atomic_private_directory','private_file','broad_allow_rejected','null_dacl_rejected','foreign_owner_rejected','junction_rejected','hardlink_rejected','sqlite_sidecars_observed','exclusive_create_preserves_existing','replacement_changes_identity']){
   assert.equal(report.cases.find(item=>item.id===id)?.passed,true,id);
  }
  assert.equal(report.cross_user_access,'not_tested');

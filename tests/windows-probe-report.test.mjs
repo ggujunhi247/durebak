@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const metadata={platform:'win32',arch:'x64',os_release:'10.0.26100',node:'v24.21.0'};
-const ids=['atomic_private_directory','private_file','broad_allow_rejected','null_dacl_rejected','foreign_owner_rejected','junction_rejected','hardlink_rejected','sqlite_sidecars_observed'];
-const fixture=()=>({status:'probe_only',cases:ids.map(id=>({id,passed:true})),inherited_file_private:false,sqlite_sidecars_private:false,helper_delivery:'undecided',filesystem:'NTFS'});
+const ids=['atomic_private_directory','private_file','broad_allow_rejected','null_dacl_rejected','foreign_owner_rejected','junction_rejected','hardlink_rejected','sqlite_sidecars_observed','exclusive_create_preserves_existing','replacement_changes_identity'];
+const fixture=()=>({status:'probe_only',cases:ids.map(id=>({id,passed:true})),inherited_file_private:false,sqlite_sidecars_private:false,token_owner_is_user:false,inherited_owner_is_user:false,inherited_owner_matches_token_owner:true,sqlite_owners_match_token_owner:true,helper_delivery:'undecided',filesystem:'NTFS'});
 async function format(result){
  const module=await import('../scripts/windows/probe-report.mjs');
  return module.sanitizeProbeResult(result,metadata);
@@ -45,4 +45,13 @@ test('probe BOM and failed individual cases remain observable',async()=>{
  assert.equal(result.exitCode,1);
  assert.equal(result.report.cases[3].passed,false);
  assert.equal(result.report.status,'probe_only');
+});
+
+test('probe owner observations require booleans and never accept raw owner identities',async()=>{
+ for(const key of ['token_owner_is_user','inherited_owner_is_user','inherited_owner_matches_token_owner','sqlite_owners_match_token_owner']){
+  const report=fixture();delete report[key];
+  assert.equal((await format(success(report))).report.reason,'probe_report_invalid');
+  report[key]='S-1-5-21-123-456-789-1001';
+  assert.equal((await format(success(report))).report.reason,'probe_report_invalid');
+ }
 });
