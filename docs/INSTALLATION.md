@@ -11,7 +11,7 @@
 | 개발 소스 | [저장소](https://github.com/ggujunhi247/durebak) | 아직 배포되지 않은 변경 포함 가능 |
 | 게시 절차 | [Release runbook](RELEASING.md) | CI/CD·OIDC·게시 재시도 및 검증 |
 
-2026-10-11 조회 시 npm `alpha`는 `0.1.0-alpha.22`, `latest`는 `0.1.0-alpha.2`이며, GitHub에는 `v0.1.0-alpha.23` 배포 파일이 있습니다. 이는 조회 시점의 기록입니다. 설치 직전 아래 명령으로 다시 확인하세요. alpha.23 npm 게시 시도는 실패했으며 GitHub 파일 배포와 구분합니다. `latest`가 가장 최근 alpha라고 가정하지 마세요.
+2026-10-11 조회 시 npm `alpha`는 `0.1.0-alpha.22`, `latest`는 `0.1.0-alpha.2`이며, GitHub에는 `v0.1.0-alpha.24` 배포 파일이 있습니다. 이는 조회 시점의 기록입니다. 설치 직전 아래 명령으로 다시 확인하세요. alpha.23과 alpha.24의 npm CI 게시 시도는 E404로 실패했으며 GitHub 파일 배포와 구분합니다. `latest`가 가장 최근 alpha라고 가정하지 마세요.
 
 ## npm 설치·업데이트
 
@@ -30,7 +30,7 @@ npm install --global durebak@alpha --registry=https://registry.npmjs.org
 durebak --version
 ```
 
-버전을 고정하려면 실제 게시를 확인한 버전을 지정합니다. 다음은 조회 시점에 게시된 버전의 예이며, alpha.23을 설치하는 명령은 아닙니다.
+버전을 고정하려면 실제 게시를 확인한 버전을 지정합니다. 다음은 조회 시점에 게시된 버전의 예이며, alpha.24를 설치하는 명령은 아닙니다.
 
 ```sh
 npm install --global durebak@0.1.0-alpha.22 --registry=https://registry.npmjs.org
@@ -40,12 +40,12 @@ npm install --global durebak@0.1.0-alpha.22 --registry=https://registry.npmjs.or
 
 ## GitHub 배포 파일 설치
 
-npm 게시가 아직 안 된 버전은 [해당 GitHub Release](https://github.com/ggujunhi247/durebak/releases/tag/v0.1.0-alpha.23)의 `.tgz`와 `SHA256SUMS`를 받습니다. 버전 URL의 공식 파일만 사용하고 내려받은 `.tgz`의 SHA256을 비교하세요. SHA256은 파일 일치 검사이며, 같은 배포처에서 받은 checksum만으로 독립적인 게시자 서명을 증명하지는 않습니다.
+npm 게시가 아직 안 된 버전은 [해당 GitHub Release](https://github.com/ggujunhi247/durebak/releases/tag/v0.1.0-alpha.24)의 `.tgz`와 `SHA256SUMS`를 받습니다. 버전 URL의 공식 파일만 사용하고 내려받은 `.tgz`의 SHA256을 비교하세요. SHA256은 파일 일치 검사이며, 같은 배포처에서 받은 checksum만으로 독립적인 게시자 서명을 증명하지는 않습니다.
 
-예를 들어 alpha.23 파일을 받은 디렉터리에서 macOS는 `shasum -a 256 --check SHA256SUMS`, Linux는 `sha256sum --check SHA256SUMS`를 실행합니다. 성공한 파일만 설치합니다.
+예를 들어 alpha.24 파일을 받은 디렉터리에서 macOS는 `shasum -a 256 --check SHA256SUMS`, Linux는 `sha256sum --check SHA256SUMS`를 실행합니다. 성공한 파일만 설치합니다.
 
 ```sh
-npm install --global ./durebak-0.1.0-alpha.23.tgz
+npm install --global ./durebak-0.1.0-alpha.24.tgz
 durebak --version
 ```
 
@@ -92,7 +92,7 @@ GitHub 릴리스 알림은 그 릴리스가 게시됐다는 뜻입니다. npm �
 durebak update-check --channel alpha
 durebak update status
 durebak update enable --mode notify --channel alpha
-durebak update pin 0.1.0-alpha.23
+durebak update pin 0.1.0-alpha.24
 durebak update unpin
 durebak update disable
 ```
@@ -108,3 +108,11 @@ durebak update disable
 `update enable --mode auto`와 `update apply --version VERSION`은 `automatic_apply_not_configured`로 차단됩니다. `update status`의 `apply_blockers`는 운영 서명 키, 설치 소유자, maintenance gate, 독립 복구 worker 부재를 표시합니다. 자동 설치·DB 관문·실패 복구와 Windows 설치기는 [업데이트 설계](UPDATE-DESIGN.md)의 남은 구현 범위입니다. 테스트용 서명 검증 성공을 운영 자동 적용 지원으로 보지 않습니다.
 
 공식 npm 명령 참고: [npm install](https://docs.npmjs.com/cli/v11/commands/npm-install/), [npm view](https://docs.npmjs.com/cli/v11/commands/npm-view/).
+
+## alpha.24 배포 검증 기록
+
+[alpha.24 릴리스](https://github.com/ggujunhi247/durebak/releases/tag/v0.1.0-alpha.24)는 [배포 실행](https://github.com/ggujunhi247/durebak/actions/runs/38117312373)에서 같은 artifact의 Linux/macOS 설치 검사를 통과한 뒤 게시되었습니다. 내려받은 파일도 checksum·117개 파일 allowlist·설치 후 업데이터 상태/차단·협업 송수신 smoke를 재검증했습니다. `.tgz`의 SHA256은 `c4782ccd8eda9a5e0777259e50a8fa3454aa86c545c35fc9534f4066057608b5`입니다. 위 checksum 확인 절차를 계속 따르세요.
+
+같은 실행의 npm publish 단계는 registry PUT 요청의 E404로 실패했습니다. 이것을 npm 게시 완료로 보지 않습니다. npm 설정의 기존 trusted publisher에서 GitHub owner `ggujunhi247`, repository `durebak`, workflow filename `release.yml`, environment `npm`, 직접 `npm publish` 허용 여부를 확인해야 합니다. 정확한 설정값과 현재 권한은 계정 소유자 확인이 필요하며 E404만으로 어느 필드가 잘못됐는지 단정하지 않습니다. [npm 공식 trusted publishing 안내](https://docs.npmjs.com/trusted-publishers/)
+
+설정을 수정한 뒤 새 파일을 다시 만드는 대신 기존 배포 실행의 실패한 npm job만 재실행하여 같은 artifact를 게시하고 registry integrity·다운로드 bytes·alpha dist-tag를 다시 검증합니다. 이미 게시된 GitHub 파일이나 기존 버전은 덮어쓰지 않습니다.
