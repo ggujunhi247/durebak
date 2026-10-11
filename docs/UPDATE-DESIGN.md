@@ -1,6 +1,6 @@
 # 새 버전 알림·자동 적용 설계 (제안)
 
-상태: 자동 적용까지 포함한 승인 설계. 현재 개발 소스에는 조회·private 정책·notify worker·macOS/Linux 사용자 예약·Ed25519 검증기를 구현했다. 기존 alpha.23 배포 파일에는 포함되지 않는다. 자동 설치·rollback·maintenance gate·독립 recovery worker·운영 서명 키/채널은 미구현이며 `auto`/`apply`는 차단한다. 현재 가능한 설치·수동 업데이트·GitHub 릴리스 구독은 [설치 안내](INSTALLATION.md)를 따른다. Windows 제품 지원은 기존 저장 보안·설치 실검증 관문 이후에만 활성화한다.
+상태: 자동 적용까지 포함한 승인 설계. alpha.24 소스에는 조회·private 정책·notify worker·macOS/Linux 사용자 예약·Ed25519 검증기를 구현했다. 기존 alpha.23 배포 파일에는 포함되지 않는다. 자동 설치·rollback·maintenance gate·독립 recovery worker·운영 서명 키/채널은 미구현이며 `auto`/`apply`는 차단한다. 현재 가능한 설치·수동 업데이트·GitHub 릴리스 구독은 [설치 안내](INSTALLATION.md)를 따른다. Windows 제품 지원은 기존 저장 보안·설치 실검증 관문 이후에만 활성화한다.
 
 ## 목표와 접근 선택
 
@@ -21,7 +21,7 @@
 | `durebak update pin VERSION` / `unpin` | 버전 고정/해제; 고정 중 자동 적용 없음 |
 | `durebak update apply --version VERSION` | 검증된 후보를 지정하여 동일한 안전 관문으로 적용; unsafe 강제 적용 옵션 없음 |
 
-현재 동작하는 명령은 check/status, enable notify, disable, pin/unpin, 예약용 worker다. 설치 소유자는 unverified로 표시하며 설치 명령을 임의 생성하지 않는다. auto/apply는 설치를 시작하지 않고 오류와 status의 차단 이유로 안내한다. 알림 backend의 검증 근거와 사용법은 [설치 안내](INSTALLATION.md#개발-소스의-제품-내-업데이트-확인알림)를 따른다. 운영 신뢰 키는 비어 있으며 verifier의 fixture key를 제품 키로 사용하지 않는다. 아래 자동 적용 계약은 남은 구현 요구사항이다.
+현재 동작하는 명령은 check/status, enable notify, disable, pin/unpin, 예약용 worker다. 설치 소유자는 unverified로 표시하며 설치 명령을 임의 생성하지 않는다. auto/apply는 설치를 시작하지 않고 오류와 status의 차단 이유로 안내한다. 알림 backend의 검증 근거와 사용법은 [설치 안내](INSTALLATION.md#제품-내-업데이트-확인알림-alpha24부터)를 따른다. 운영 신뢰 키는 비어 있으며 verifier의 fixture key를 제품 키로 사용하지 않는다. 아래 자동 적용 계약은 남은 구현 요구사항이다.
 
 `notify`는 검사와 알림만, `auto`는 안전 시점에 적용한다. 기본은 disabled이며 모드·채널은 사용자가 명시한다. 자동 검사 주기는 1시간, 부하 분산 jitter는 최대10분이다. 로그인 시 예약 worker가 대기 상태를 다시 확인한다. timeout 또는 일시적 실패의 같은 실행 내 재시도는 최대2회이며 이후 다음 예약으로 넘긴다. 수동 check는 즉시 조회한다. 사용자 버전 고정과 중지 설정을 긴급 수정이라는 이유로 무시하지 않는다.
 
