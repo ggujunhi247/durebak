@@ -2,7 +2,7 @@
 
 macOS 또는 Linux와 Node.js 24 이상이 필요하다. Windows 저장소는 아직 지원하지 않으며, OS 사용자 ID를 확인할 수 없는 환경에서는 파일 생성 전에 `unsupported_storage_platform`으로 중단한다. GitHub 소스와 npm alpha 채널은 공개되어 있다. 다음 개발 기능은 배포 버전과 구분한다. 아래 절차는 저장소에서 빌드해 실행하는 방법이다.
 
-배포 파일 설치·업데이트·실제 경로 확인·릴리스 알림은 [설치·업데이트 안내](https://github.com/ggujunhi247/durebak/blob/main/docs/INSTALLATION.md)를 따른다. 제품 내 자동 업데이트는 아직 제공하지 않는다.
+배포 파일 설치·업데이트·실제 경로 확인·릴리스 알림은 [설치·업데이트 안내](https://github.com/ggujunhi247/durebak/blob/main/docs/INSTALLATION.md)를 따른다. 현재 개발 소스의 `update-check`/`update status`와 opt-in notify 예약은 설치 안내를 따른다. 기존 alpha.23 배포에는 이 명령이 없으며 자동 설치/rollback은 아직 제공하지 않는다.
 
 ```sh
 npm ci

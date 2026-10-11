@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {handleUpdateCommand,updateCommandContext,cachedUpdateNotice} from './update-cli.js';
 import {managedBindSchema} from './managed-control.js';
 import { resolveHarness, legacyProvider } from './harnesses/registry.js';
 import { harnessCatalog } from './harnesses/catalog.js';
@@ -20,6 +21,11 @@ import { storagePaths, managedCredentialPath, managedRecordPath } from './paths.
 
 const help = `Durebak ${version} — local cooperative session bus
 
+  durebak update-check [--channel alpha|beta|rc|stable]  Read published update candidates
+  durebak update status|disable|unpin [--update-dir PATH]
+  durebak update enable --mode notify --channel alpha|beta|rc|stable
+  durebak update pin VERSION                     Pin notification policy version
+  durebak update apply --version VERSION         Report blocked automatic-apply prerequisites
   durebak harnesses                              Read harness capability evidence (no host execution)
   durebak serve [--data-dir PATH]                  Run loopback daemon in foreground
   durebak register --workspace PATH --alias NAME --harness codex|claude-code|opencode|other [--out FILE] [--data-dir PATH]
@@ -46,12 +52,22 @@ const output = (value:unknown) => process.stdout.write(JSON.stringify(value)+'\n
 function required(value: string | undefined, name: string) { if (!value) fail(`missing_${name}`); return value; }
 
 async function main() {
-  const { values, positionals } = parseArgs({ allowPositionals:true, options:{
-    'native-id':{type:'string'},profile:{type:'string'},instance:{type:'string'},key:{type:'string'},'data-dir':{type:'string'}, workspace:{type:'string'}, alias:{type:'string'}, provider:{type:'string'}, harness:{type:'string'}, out:{type:'string'}, session:{type:'string'}, json:{type:'string'}, input:{type:'string'}, host:{type:'string'}, help:{type:'boolean'}, version:{type:'boolean'},
-  } });
+  const options = {
+    'update-dir':{type:'string'},channel:{type:'string'},mode:{type:'string'},'native-id':{type:'string'},profile:{type:'string'},instance:{type:'string'},key:{type:'string'},'data-dir':{type:'string'}, workspace:{type:'string'}, alias:{type:'string'}, provider:{type:'string'}, harness:{type:'string'}, out:{type:'string'}, session:{type:'string'}, json:{type:'string'}, input:{type:'string'}, host:{type:'string'}, help:{type:'boolean'},
+  } as const;
+  // Resolve subcommands while respecting values of options placed before them.
+  const preliminary=parseArgs({allowPositionals:true,strict:false,options});
+  const applying=preliminary.positionals[0]==='update'&&preliminary.positionals[1]==='apply';
+  const {values,positionals}=parseArgs({allowPositionals:true,options:{...options,version:{type:applying?'string':'boolean'}}});
   const command = positionals[0];
-  if (values.version) { process.stdout.write(version+'\n'); return; }
+  if (values.version===true) { process.stdout.write(version+'\n'); return; }
   if (values.help || !command) { process.stdout.write(help); return; }
+  if(command==='update'||command==='update-check'){
+    output(await handleUpdateCommand(command==='update-check'?'check':positionals[1]??'status',positionals.slice(command==='update-check'?1:2),{...(values.mode===undefined?{}:{mode:values.mode}),...(values.channel===undefined?{}:{channel:values.channel}),...(typeof values.version==='string'?{target:values.version}:{})},updateCommandContext(values['update-dir'])));return;
+  }
+  if(process.stderr.isTTY&&command!=='mcp'&&['skills','harnesses','paths','serve','register','revoke','setup','managed-bind','managed-policy','dashboard','doctor','call','export'].includes(command)){
+    try{const context=updateCommandContext();const notice=cachedUpdateNotice(context.directory,version);if(notice)process.stderr.write(notice);}catch{/* A stale notification cannot break an unrelated command. */}
+  }
   if(command==='skills'){output(installSkills(required(values.harness,'harness'),required(values.workspace,'workspace')));return;}
   if (command === 'harnesses') { output(harnessCatalog()); return; }
   const selectedDirectory = () => dataDirectory(values['data-dir']);

@@ -36,6 +36,14 @@ jobs:
       - run: npm run repo:check
       - run: npm run check
       - run: npm test
+      - name: Verify live user update scheduler on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo loginctl enable-linger "$(id -un)"
+          sudo systemctl start "user@$(id -u).service"
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+          node scripts/check-update-scheduler.mjs
       - run: npm run package:check
       - run: npm run package:smoke
       - run: npm audit --omit=dev --audit-level=high

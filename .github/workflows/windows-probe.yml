@@ -24,3 +24,4 @@ jobs:
           npm ci --ignore-scripts
           npm run build
           node --test tests/windows-storage-refusal.test.mjs
+          node --import tsx --test tests/updates.test.ts tests/update-trust.test.ts tests/update-cli.test.mjs

@@ -1,6 +1,6 @@
 # 새 버전 알림·자동 적용 설계 (제안)
 
-상태: 사용자 요청에 따른 설계 검토본. 알림뿐 아니라 자동 적용까지 먼저 설계한다. 아래 명령·worker·예약 작업은 아직 구현하지 않았다. 현재 가능한 설치·수동 업데이트·GitHub 릴리스 구독은 [설치 안내](INSTALLATION.md)를 따른다. Windows 제품 지원은 기존 저장 보안·설치 실검증 관문 이후에만 활성화한다.
+상태: 자동 적용까지 포함한 승인 설계. 현재 개발 소스에는 조회·private 정책·notify worker·macOS/Linux 사용자 예약·Ed25519 검증기를 구현했다. 기존 alpha.23 배포 파일에는 포함되지 않는다. 자동 설치·rollback·maintenance gate·독립 recovery worker·운영 서명 키/채널은 미구현이며 `auto`/`apply`는 차단한다. 현재 가능한 설치·수동 업데이트·GitHub 릴리스 구독은 [설치 안내](INSTALLATION.md)를 따른다. Windows 제품 지원은 기존 저장 보안·설치 실검증 관문 이후에만 활성화한다.
 
 ## 목표와 접근 선택
 
@@ -10,7 +10,7 @@
 
 ## 사용자 명령과 정책
 
-제안 명령:
+목표 명령 계약 (현재 구현 범위는 아래 표 다음 문단 참조):
 
 | 명령 | 동작 |
 | --- | --- |
@@ -20,6 +20,8 @@
 | `durebak update disable` | 일반 검사 예약 제거와 향후 자동 적용 차단; applying transaction의 독립 복구 경로는 종료 상태 확정까지 유지 |
 | `durebak update pin VERSION` / `unpin` | 버전 고정/해제; 고정 중 자동 적용 없음 |
 | `durebak update apply --version VERSION` | 검증된 후보를 지정하여 동일한 안전 관문으로 적용; unsafe 강제 적용 옵션 없음 |
+
+현재 동작하는 명령은 check/status, enable notify, disable, pin/unpin, 예약용 worker다. 설치 소유자는 unverified로 표시하며 설치 명령을 임의 생성하지 않는다. auto/apply는 설치를 시작하지 않고 오류와 status의 차단 이유로 안내한다. 알림 backend의 검증 근거와 사용법은 [설치 안내](INSTALLATION.md#개발-소스의-제품-내-업데이트-확인알림)를 따른다. 운영 신뢰 키는 비어 있으며 verifier의 fixture key를 제품 키로 사용하지 않는다. 아래 자동 적용 계약은 남은 구현 요구사항이다.
 
 `notify`는 검사와 알림만, `auto`는 안전 시점에 적용한다. 기본은 disabled이며 모드·채널은 사용자가 명시한다. 자동 검사 주기는 1시간, 부하 분산 jitter는 최대10분이다. 로그인 시 예약 worker가 대기 상태를 다시 확인한다. timeout 또는 일시적 실패의 같은 실행 내 재시도는 최대2회이며 이후 다음 예약으로 넘긴다. 수동 check는 즉시 조회한다. 사용자 버전 고정과 중지 설정을 긴급 수정이라는 이유로 무시하지 않는다.
 
@@ -83,3 +85,11 @@ GitHub 릴리스 구독은 현재 즉시 쓸 수 있는 발견 경로다. 자동
 5. 세 OS 회귀·패키지 allowlist·보안 리뷰·출처별 배포/적용 근거 후 기능별 지원표를 갱신한다. Windows 핵심 저장/설치/복구 시험 skip은 출시 실패다.
 
 구현 전 승인할 설계 범위는 위 자동 적용 계약까지다. 서명 운영 및 Windows 패키지 ADR의 미확정 값은 실제 조사 결과로 별도 확정하며, 그 전에도 읽기 전용 조회/알림 구현은 독립적으로 검증할 수 있다.
+
+## 현재 구현 증거와 남은 관문
+
+조회는 고정 npm/GitHub HTTPS 출처, 요청당 5초·256KiB, redirect 거부, GitHub 최대5페이지/50개로 제한한다. 실패를 최신이라고 표시하지 않는다. 현재 jitter는 0이며 같은 실행 내 재시도는 하지 않는다. 정책과 결과는 0700 root/0600 파일, 원자적 rename, SQLite OS coordination lock으로 보관한다. 프로세스 강제 종료 후 writer/worker 잠금 해제, 정책 변경 중 결과 폐기, 채널 변경/수동 업그레이드 뒤 알림 정합성을 회귀 검증한다. 운영 DB에는 접근하지 않는다.
+
+macOS는 임시 사용자 예약의 실제 등록→RunAtLoad worker 조회→제거를 확인했다. Linux는 CI의 실제 user manager에서 등록→service 실행→결과 저장→제거를 검증한다. 예약 파일/인자 단위 테스트만으로 Windows나 다른 OS 실지원이라고 주장하지 않는다. Windows CI는 읽기 전용 조회·서명 검증·CLI guard만 검증한다.
+
+자동 적용 완료 조건은 아직 충족하지 않았다. 다음 구현 순서는 (1) 서명 운영/회전 ADR와 CI signed-channel 발행, (2) 모든 DB/credential 접근의 maintenance fence 및 확인된 data-dir ledger 점검, (3) 설치 소유자별 artifact staging·독립 복구 transaction·실제 N-1 업그레이드/전원 중단 회귀, (4) Windows 저장/설치 ADR·WinGet 등록·PowerShell/Task Scheduler 실검증이다. 이 관문 없이 auto를 켜거나 `applied`라고 표시하지 않는다.
