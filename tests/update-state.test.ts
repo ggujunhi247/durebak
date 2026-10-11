@@ -51,10 +51,10 @@ test('process death releases worker and writer coordination without deleting unc
   const signal=join(dir,action+'-ready');
   const code=`import {writeFileSync} from 'node:fs';import {runUpdateWorker,changeUpdateState} from ${JSON.stringify(moduleUrl)};
    const signal=()=>writeFileSync(${JSON.stringify(signal)},'ready');
-   ${action==='worker'?`await runUpdateWorker(${JSON.stringify(dir)},${JSON.stringify(current)},async()=>{signal();await new Promise(()=>{});},1000);`:`changeUpdateState(${JSON.stringify(dir)},${JSON.stringify(current)},s=>{signal();process.kill(process.pid,'SIGKILL');return s;});`}`;
+   ${action==='worker'?`await runUpdateWorker(${JSON.stringify(dir)},${JSON.stringify(current)},async()=>{setInterval(()=>{},1000);signal();await new Promise(()=>{});},1000);`:`changeUpdateState(${JSON.stringify(dir)},${JSON.stringify(current)},s=>{signal();process.kill(process.pid,'SIGKILL');return s;});`}`;
   const child=spawn(process.execPath,['--import','tsx','--input-type=module','-e',code],{stdio:'ignore'});t.after(()=>child.kill('SIGKILL'));const exited=once(child,'exit');
   for(let i=0;i<100&&!existsSync(signal);i++)await delay(20);
-  assert.ok(existsSync(signal),'child reached coordination boundary');child.kill('SIGKILL');await exited;
+  assert.ok(existsSync(signal),'child reached coordination boundary');child.kill('SIGKILL');const [,signalName]=await exited;assert.equal(signalName,'SIGKILL');
   assert.doesNotThrow(()=>changeUpdateState(dir,current,s=>s));
   assert.equal((await runUpdateWorker(dir,current,async()=>({}),1000)).checked,true);
   changeUpdateState(dir,current,s=>({...s,next_check_at:null}));
