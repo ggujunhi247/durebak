@@ -52,3 +52,9 @@ Retain the successful rehearsal's `release` artifact and its checksum. Revalidat
 ## Repository controls
 
 Release tags matching `v*` are protected against updates and deletion. The GitHub `npm` environment requires repository-owner review and accepts workflow runs from `main`. Dispatch Release from `main` with the version tag supplied as its input. These GitHub controls do not configure npm trusted publishing; the npm package must separately trust this repository, `release.yml`, and environment `npm` before automated publication can work. The initial authenticated bootstrap is a separate path and does not establish OIDC provenance.
+
+## User installation and update notification routes
+
+Keep [installation and update instructions](INSTALLATION.md) linked from the README and packaged USAGE guide. The [update design](UPDATE-DESIGN.md) separates future CLI notices from automatic application. GitHub release subscriptions are available now; a release notification does not prove npm publication or installation on a user's machine.
+
+For each release, verify the exact GitHub download URL and checksum, npm version/dist-tag and registry artifact independently. Give users a registry command only for a published version. If the npm channel lags GitHub, state the difference and provide the exact verified GitHub file route; never recommend downgrading a newer installation to the older channel. Add these results to the release's verification record after publication. Do not rewrite immutable assets or change older notes to imply a failed publication succeeded.
