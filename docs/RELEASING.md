@@ -51,6 +51,18 @@ Retain the successful rehearsal's `release` artifact and its checksum. Revalidat
 
 ## Repository controls
 
+Verified GitHub configuration (2026-10-11):
+
+- Default branch: `main`; the repository About homepage links to [installation and update instructions](https://github.com/ggujunhi247/durebak/blob/main/docs/INSTALLATION.md).
+- Main merges require an up-to-date branch and GitHub Actions checks `workflows`, `verify (ubuntu-latest, 24)`, `verify (macos-latest, 24)`, `secret-scan`, and `storage-probe` (GitHub Actions App ID 15368). The Windows probe is a required preparation check, not a claim of Windows runtime support.
+- Existing PR protection remains enabled, with zero required human approvals for the current single-maintainer setup. Administrator enforcement is disabled; required checks describe the normal merge path, not an administrator-proof guarantee. Force pushes and branch deletion are disabled.
+- Actions defaults to read-only workflow permissions and cannot approve PR reviews. Specific release jobs declare their needed permissions, including OIDC `id-token: write` only for npm publication.
+- The `npm` environment requires repository-owner review and allows only the `main` branch. npm separately trusts `ggujunhi247/durebak`, workflow `release.yml`, environment `npm`; successful alpha.24 OIDC delivery is recorded in [the release run](https://github.com/ggujunhi247/durebak/actions/runs/38117312373).
+- The active `Protect release tags` ruleset blocks updates/deletions of `v*` tags with no bypass actors. The alpha.24 release is a prerelease; its edited description links verified npm/GitHub installation and states remaining automatic-install/Windows limitations. Editing description text does not replace its immutable assets.
+
+These are live repository settings, not settings installed by cloning this source. Recheck them when repository ownership, workflow names, environments or check names change. Renaming a required check must include updating main protection to avoid blocked merges.
+
+
 Release tags matching `v*` are protected against updates and deletion. The GitHub `npm` environment requires repository-owner review and accepts workflow runs from `main`. Dispatch Release from `main` with the version tag supplied as its input. These GitHub controls do not configure npm trusted publishing; the npm package must separately trust this repository, `release.yml`, and environment `npm` before automated publication can work. The initial authenticated bootstrap is a separate path and does not establish OIDC provenance.
 
 ## User installation and update notification routes
