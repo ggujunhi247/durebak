@@ -50,3 +50,11 @@ Primary references:
 The probe pins `PSModulePath` to its selected Windows PowerShell installation. A PowerShell7 → Node → Windows PowerShell5 chain otherwise inherits incompatible shared module paths; the initial Windows CI exposed `CouldNotAutoloadMatchingModule` while querying ACLs. This is a probe launcher fix, not a relaxation of ACL policy.
 
 Initial hosted-runner observations also found that an ordinary inherited file and SQLite sidecars did not satisfy the proposed current-user-owner policy (`inherited_file_private=false`, `sqlite_sidecars_private=false`). The private-file positive fixture uses creation-time explicit ownership, while inherited-file observations remain separate booleans. A protected parent DACL alone is therefore insufficient evidence for the entire production storage policy. Standard-user and elevated-token ownership must be tested separately before choosing a Windows backend.
+
+## Recorded extended runner evidence
+
+[PR58 Windows investigation run](https://github.com/ggujunhi247/durebak/actions/runs/38112946942) on Windows build10.0.26100, x64, NTFS and Node24.21.0 passed all ten synthetic cases, including exclusive-create preservation and controlled replacement on the Unicode/space path. The Windows test suite passed six tests with one non-Windows-only skip; the separate compiled-runtime refusal test also passed.
+
+The default token owner differed from the current user (`token_owner_is_user=false`). Both the inherited-file owner and the observed SQLite owners matched that default token owner (`inherited_owner_matches_token_owner=true`, `sqlite_owners_match_token_owner=true`). Their proposed current-user private-policy observations remained false. These measurements support default token ownership as the explanation for the owner mismatch on this runner; they do not prove the full policy would pass under a standard-user token, nor do they measure cross-user denial or elevation. Explicit creation-time private fixtures passed without weakening the policy.
+
+This is hosted-runner evidence, not Windows11 desktop or production-helper validation. The open gates above remain unchanged.
