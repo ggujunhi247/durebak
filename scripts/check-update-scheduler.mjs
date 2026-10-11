@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 if(process.platform!=='linux'||process.geteuid?.()===0)throw Error('linux_user_manager_required');
-const directory=mkdtempSync(join(tmpdir(),'durebak-update-live-'));
+const directory=mkdtempSync(join(tmpdir(),'durebak update 한글 $100%-'));
 const command=(...args)=>{
  const result=spawnSync(process.execPath,[resolve('dist/cli.js'),'update',...args,'--update-dir',directory],{encoding:'utf8',timeout:30000});
  if(result.status!==0)throw Error('update_command_failed');return JSON.parse(result.stdout);
