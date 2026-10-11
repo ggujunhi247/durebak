@@ -11,7 +11,7 @@
 | 개발 소스 | [저장소](https://github.com/ggujunhi247/durebak) | 아직 배포되지 않은 변경 포함 가능 |
 | 게시 절차 | [Release runbook](RELEASING.md) | CI/CD·OIDC·게시 재시도 및 검증 |
 
-2026-10-11 조회 시 npm `alpha`는 `0.1.0-alpha.22`, `latest`는 `0.1.0-alpha.2`이며, GitHub에는 `v0.1.0-alpha.24` 배포 파일이 있습니다. 이는 조회 시점의 기록입니다. 설치 직전 아래 명령으로 다시 확인하세요. alpha.23과 alpha.24의 npm CI 게시 시도는 E404로 실패했으며 GitHub 파일 배포와 구분합니다. `latest`가 가장 최근 alpha라고 가정하지 마세요.
+2026-10-11 최종 검증 시 npm `alpha`는 `0.1.0-alpha.24`, `latest`는 `0.1.0-alpha.2`이며, GitHub에는 `v0.1.0-alpha.24` 배포 파일이 있습니다. 이는 조회 시점의 기록입니다. 설치 직전 아래 명령으로 다시 확인하세요. alpha.23과 alpha.24의 초기 npm CI 시도는 실패했지만, alpha.24는 trusted publisher 등록 후 게시·파일 일치·재설치 검증을 완료했습니다. GitHub 파일 배포와 npm 게시 결과는 계속 구분합니다. `latest`가 가장 최근 alpha라고 가정하지 마세요.
 
 ## npm 설치·업데이트
 
@@ -30,10 +30,10 @@ npm install --global durebak@alpha --registry=https://registry.npmjs.org
 durebak --version
 ```
 
-버전을 고정하려면 실제 게시를 확인한 버전을 지정합니다. 다음은 조회 시점에 게시된 버전의 예이며, alpha.24를 설치하는 명령은 아닙니다.
+버전을 고정하려면 실제 게시를 확인한 버전을 지정합니다. 다음은 실제 게시와 재설치를 검증한 alpha.24 고정 설치 명령입니다.
 
 ```sh
-npm install --global durebak@0.1.0-alpha.22 --registry=https://registry.npmjs.org
+npm install --global durebak@0.1.0-alpha.24 --registry=https://registry.npmjs.org
 ```
 
 일시 실행은 `npx --yes durebak@alpha --help`입니다. 서버·MCP처럼 계속 실행할 구성은 정확한 버전 또는 전역 설치를 선택하세요. `npx`를 다시 호출했다고 이미 실행 중인 서버가 갱신되지는 않습니다.
@@ -113,6 +113,6 @@ durebak update disable
 
 [alpha.24 릴리스](https://github.com/ggujunhi247/durebak/releases/tag/v0.1.0-alpha.24)는 [배포 실행](https://github.com/ggujunhi247/durebak/actions/runs/38117312373)에서 같은 artifact의 Linux/macOS 설치 검사를 통과한 뒤 게시되었습니다. 내려받은 파일도 checksum·117개 파일 allowlist·설치 후 업데이터 상태/차단·협업 송수신 smoke를 재검증했습니다. `.tgz`의 SHA256은 `c4782ccd8eda9a5e0777259e50a8fa3454aa86c545c35fc9534f4066057608b5`입니다. 위 checksum 확인 절차를 계속 따르세요.
 
-같은 실행의 npm publish 단계는 registry PUT 요청의 E404로 실패했습니다. 이것을 npm 게시 완료로 보지 않습니다. npm 설정의 기존 trusted publisher에서 GitHub owner `ggujunhi247`, repository `durebak`, workflow filename `release.yml`, environment `npm`, 직접 `npm publish` 허용 여부를 확인해야 합니다. 정확한 설정값과 현재 권한은 계정 소유자 확인이 필요하며 E404만으로 어느 필드가 잘못됐는지 단정하지 않습니다. [npm 공식 trusted publishing 안내](https://docs.npmjs.com/trusted-publishers/)
+같은 실행의 npm publish 단계는 registry PUT 요청의 E404로 실패했습니다. 이것을 npm 게시 완료로 보지 않습니다. 이후 계정 인증으로 trusted publisher가 없음을 확인했고, 소유자의 명시적 승인과 추가 본인 인증 후 GitHub owner `ggujunhi247`, repository `durebak`, workflow filename `release.yml`, environment `npm`, 직접 `npm publish` 권한을 등록했습니다. 재시도에서는 npm이 게시 요청을 수락했지만 공개 처리 대기를 알렸고, 즉시 metadata 조회는 404여서 검증 단계가 실패했습니다. 공개 처리 완료 후 registry integrity·다운로드 bytes가 위 GitHub artifact와 일치함을 확인했고, `alpha` dist-tag가 `0.1.0-alpha.24`임을 검증했습니다. npm 파일 재설치 smoke도 통과했으며 provenance metadata가 존재합니다. 요청 수락만으로 공개 게시 완료를 판단하지 않습니다. [npm 공식 trusted publishing 안내](https://docs.npmjs.com/trusted-publishers/)
 
 설정을 수정한 뒤 새 파일을 다시 만드는 대신 기존 배포 실행의 실패한 npm job만 재실행하여 같은 artifact를 게시하고 registry integrity·다운로드 bytes·alpha dist-tag를 다시 검증합니다. 이미 게시된 GitHub 파일이나 기존 버전은 덮어쓰지 않습니다.
