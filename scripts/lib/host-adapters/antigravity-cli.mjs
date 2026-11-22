@@ -1,4 +1,4 @@
-import {existsSync,lstatSync,mkdirSync,readFileSync,readdirSync,realpathSync,unlinkSync,writeFileSync} from 'node:fs';
+import {closeSync,existsSync,lstatSync,mkdirSync,openSync,readFileSync,readdirSync,realpathSync,unlinkSync,writeFileSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {configFile,probeCommand,safeTool,usage} from './common.mjs';
@@ -40,11 +40,18 @@ export default {
   }
   mkdirSync(config,{recursive:true,mode:0o700});
   const owned=[];
-  function dispose(){for(const [path,text] of owned)if(existsSync(path)&&!lstatSync(path).isSymbolicLink()&&readFileSync(path,'utf8')===text)unlinkSync(path);}
+  function dispose(){
+   for(const path of owned){
+    let entry;
+    try{entry=lstatSync(path);}catch(error){if(error.code==='ENOENT')continue;throw error;}
+    if(!entry.isFile()||entry.uid!==process.getuid()||realpathSync(path)!==path)throw new Error('cleanup_failed');
+    unlinkSync(path);
+   }
+  }
   try{
    for(const [path,value] of [[join(profile,'settings.json'),settings],[join(config,'mcp_config.json'),mcp]]){
-    const text=JSON.stringify(value);
-    writeFileSync(path,text,{flag:'wx',mode:0o600});owned.push([path,text]);
+    const file=openSync(path,'wx',0o600);owned.push(path);
+    try{writeFileSync(file,JSON.stringify(value));}finally{closeSync(file);}
    }
   }catch(error){dispose();throw error;}
   return {command:'/bin/sh',args:['-c','exec "$@" --print "$(cat)"','durebak-agy','agy','--sandbox','--disable-slash-commands','--print-timeout','60s','--output-format','stream-json','--log-file',join(configDir,'agy.log'),...(model?['--model',model]:[])],env,dispose};
