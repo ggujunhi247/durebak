@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync,readFileSync,writeFileSync,mkdirSync,symlinkSync,existsSync} from 'node:fs';
+import {mkdtempSync,rmSync,readFileSync,writeFileSync,mkdirSync,symlinkSync,existsSync,realpathSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {installSkills} from '../src/skills.js';
-function fixture(t:test.TestContext){const root=mkdtempSync(join(tmpdir(),'durebak-skills '));t.after(()=>rmSync(root,{recursive:true,force:true}));return root;}
+function fixture(t:test.TestContext){const root=realpathSync(mkdtempSync(join(tmpdir(),'durebak-skills ')));t.after(()=>rmSync(root,{recursive:true,force:true}));return root;}
 test('one project gets discoverable shared skills and provider command entry points without credentials',t=>{
  const root=fixture(t),result=installSkills('all',root);assert.equal(result.scope,'project');assert.equal(result.native_host_verified,false);assert.equal(result.auto_wake,false);
  const shared=readFileSync(join(root,'.agents/skills/durebak/SKILL.md'),'utf8'),claude=readFileSync(join(root,'.claude/skills/durebak/SKILL.md'),'utf8');assert.equal(shared,claude);assert.ok(readFileSync(join(root,'.opencode/commands/durebak.md'),'utf8').includes('$ARGUMENTS'));assert.ok(!shared.includes(root));assert.ok(!shared.includes('owner_token'));assert.equal(result.files.length,5);
