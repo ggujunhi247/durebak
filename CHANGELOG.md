@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-alpha.25 — 2026-11-23
+
+- Distribute the same Durebak skill and operations reference through the CLI and the shared Claude Code/Codex Git marketplace.
+- Upgrade an unchanged alpha.24 skill by its published content fingerprint and report updated paths.
+- Add a two-session first-exchange walkthrough, selected host-pair testing, and an opt-in Antigravity reviewer with an isolated profile.
+- Stop retrying Claude combinations in a matrix after its weekly usage limit is reported.
+- Refresh runtime dependencies to versions that pass the production dependency audit.
+
 ## 0.1.0-alpha.24 — 2026-10-11
 
 - Add session-independent update discovery, numeric release/channel comparison and separate npm/GitHub availability reports. Fixed HTTPS sources, bounded responses and pagination; no remote commands or automatic downgrades.

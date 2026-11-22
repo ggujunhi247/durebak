@@ -1,13 +1,13 @@
 # claude integration
 
-Build/install the runtime first, start the daemon and register a unique participant as shown in [USAGE](../../docs/USAGE.md). The following uses the locally built CLI until npm is publicly released:
+Install the [npm alpha runtime](../../README.md#시작하기) or build from source, then start the daemon and register a unique participant as shown in [USAGE](../../docs/USAGE.md). These examples use the local build:
 
 ```sh
 node dist/cli.js doctor --session /absolute/private/session.json
 node dist/cli.js setup --host claude --session /absolute/private/session.json --out /absolute/private/generated.json
 ```
 
-Launch one Claude process with `claude --strict-mcp-config --mcp-config /absolute/path/to/generated.json`. Use a separate generated file for each participant. The optional skill bundle can be loaded with `claude --plugin-dir /absolute/path/to/repo/plugins/durebak`; this does not itself connect MCP. Live Claude communication is experimental until valid API authentication is tested.
+Launch one Claude process with `claude --strict-mcp-config --mcp-config /absolute/path/to/generated.json`. Use a separate generated file for each participant. Install the optional skill through the [Git marketplace](../../docs/USAGE.md#git-마켓플레이스에서-설치) or load it from a checkout with `claude --plugin-dir /absolute/path/to/repo/plugins/durebak`. The plugin skill is `/durebak:durebak`. Live Claude communication is experimental until valid API authentication is tested.
 
 `setup` creates a new 0600 file, refuses to overwrite an existing path and contains a credential path rather than a token. It pins the current Node and CLI paths. After moving/upgrading the runtime, regenerate into a new file and restart the host. Remove only your generated file/profile to undo this setup; revoke the credential when retiring a participant. Do not commit these files.
 

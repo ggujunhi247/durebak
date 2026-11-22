@@ -1,0 +1,13 @@
+{
+  "name": "durebak",
+  "description": "Durebak collaboration skills for local coding-agent sessions",
+  "owner": {
+    "name": "Durebak contributors"
+  },
+  "plugins": [
+    {
+      "name": "durebak",
+      "source": "./plugins/durebak"
+    }
+  ]
+}

@@ -79,15 +79,42 @@ Claude Code에는 자체 [세션 간 메시지](https://code.claude.com/docs/en/
 
 에이전트에게는 다음 절차를 지시할 수 있다: `durebak_sessions`로 상대 ID 확인 → `durebak_send` 요청 → 상대가 안전한 시점에 `durebak_receive` 호출 → 반환된 id·receipt로 `durebak_ack` 읽음 확인 → 원 요청 ID를 `replyTo`로 답변. 자동으로 상대를 깨우지 않으므로 참여 세션이 도구를 호출해야 진행된다. 바쁜 polling은 피하고 사용자/호스트가 정한 시점에 확인한다.
 
-## 4. CLI로 같은 동작 실행
+## 4. CLI로 첫 요청 왕복
+
+[런타임](#1-런타임-실행)을 켜고 같은 작업공간에 `builder`와 `reviewer`를 [따로 등록](#2-참여-세션-등록)합니다. 두 터미널에서 각각 자기 등록 결과의 `credential_file`을 사용합니다. 아래의 `BUILDER_ID`와 `REVIEWER_ID`는 등록 결과의 `session.id`로 바꿉니다. 이 예제는 CLI로 직접 메시지를 주고받으므로 에이전트 모델이나 MCP 설정 없이 큐 동작을 확인할 수 있습니다.
+
+npm에서 실행할 때는 예제의 `node dist/cli.js`를 `npx --yes durebak@alpha`로 바꿉니다.
+
+**터미널 A · builder**에서 요청을 보내고 반환된 `id`를 `REQUEST_ID`로 기록합니다.
 
 ```sh
-node dist/cli.js call sessions --session "$HOME/.durebak-sessions/builder.json"
-node dist/cli.js call send --session "$HOME/.durebak-sessions/builder.json" --json '{"to":"RECIPIENT_SESSION_ID","body":"변경안을 검토해주세요","key":"review-1"}'
-node dist/cli.js call receive --session "$HOME/.durebak-sessions/reviewer.json"
+BUILDER_SESSION='/absolute/private/path/to/builder.json'
+node dist/cli.js call send --session "$BUILDER_SESSION" --json '{"to":"REVIEWER_ID","body":"What is 6 * 7?","key":"first-request"}'
 ```
 
-`--json` 대신 `--input /private/path/request.json`으로 인자를 읽을 수 있다. 민감한 본문은 shell history와 프로세스 인자에 남지 않도록 파일 입력을 사용한다. token 자체는 명령행 인자로 받지 않는다.
+**터미널 B · reviewer**에서 큐를 확인합니다. `retry_after_ms`가 양수면 그만큼 기다린 뒤 `receive`를 실행합니다. 반환된 항목의 `id`가 `REQUEST_ID`와 일치하는지 확인하고, 그 항목의 `receipt`로 읽음을 확인한 뒤 답장합니다.
+
+```sh
+REVIEWER_SESSION='/absolute/private/path/to/reviewer.json'
+node dist/cli.js call queue_status --session "$REVIEWER_SESSION"
+node dist/cli.js call receive --session "$REVIEWER_SESSION"
+node dist/cli.js call ack --session "$REVIEWER_SESSION" --json '{"id":"REQUEST_ID","receipt":"REQUEST_RECEIPT"}'
+node dist/cli.js call send --session "$REVIEWER_SESSION" --json '{"to":"BUILDER_ID","replyTo":"REQUEST_ID","body":"6 * 7 = 42.","key":"first-reply"}'
+```
+
+**터미널 A · builder**에서 같은 방식으로 큐를 확인한 뒤 답장을 받습니다. 답장의 `reply_to`가 `REQUEST_ID`와 일치하면 같은 대화에 연결된 것입니다. 답장 자체의 `id`와 `receipt`로 읽음을 확인합니다.
+
+```sh
+node dist/cli.js call queue_status --session "$BUILDER_SESSION"
+node dist/cli.js call receive --session "$BUILDER_SESSION"
+node dist/cli.js call ack --session "$BUILDER_SESSION" --json '{"id":"REPLY_ID","receipt":"REPLY_RECEIPT"}'
+node dist/cli.js call message_status --session "$BUILDER_SESSION" --json '{"id":"REQUEST_ID"}'
+node dist/cli.js call message_status --session "$BUILDER_SESSION" --json '{"id":"REPLY_ID"}'
+```
+
+두 상태가 모두 `read`이고 답장의 `reply_to`가 원 요청 ID와 같으면 첫 왕복이 완료됐습니다. `ack` 호출이 메시지 상태를 `read`로 바꿉니다. 작업 수락과 결과 제출에는 별도 절차가 있습니다. 새 메시지는 `receive`로 가져오고, `inbox`에서는 이미 전달된 메시지를 확인합니다.
+
+같은 세션으로 예제를 새로 실행할 때는 `first-request`와 `first-reply`를 새 키로 바꿉니다. 민감한 본문은 셸 이력과 프로세스 인자에 남지 않도록 `--json` 대신 `--input /private/path/request.json`을 사용합니다.
 
 ## 큐와 메시징 규칙
 
@@ -308,8 +335,10 @@ Binding은 같은 runtime 안에서 선언된 profile/native ID의 중복 소유
 
 ### 협업 스킬과 커맨드
 
+Node.js 24 이상에서 npm 런타임을 사용해 프로젝트에 스킬을 설치합니다.
+
 ```sh
-durebak skills --harness all --workspace PROJECT
+npx --yes durebak@alpha skills --harness all --workspace PROJECT
 ```
 
 기존 프로젝트에 credential 없는 공통 협업 안내를 설치합니다. 특정 도구만 필요하면 `all` 대신 `codex`, `claude-code`, `opencode`를 지정합니다. Codex/OpenCode는 `.agents/skills/durebak`, Claude Code는 `.claude/skills/durebak`를 사용하고, OpenCode에는 `.opencode/commands/durebak.md`도 생성합니다. OpenCode가 Claude 호환 경로도 발견할 수 있으므로 두 위치의 공통 내용은 동일하게 유지합니다. 도구 버전과 설정에 따라 목록 새로고침 또는 새 세션이 필요할 수 있습니다.
@@ -320,6 +349,13 @@ durebak skills --harness all --workspace PROJECT
 
 스킬은 연결 확인·동료 조회·공유 preview·요청·receipt ACK·별도 수락·원문 조회·private revision·self_reported evidence·checkpoint 복구를 안내합니다. 커맨드 인자는 셸 코드로 실행하지 않습니다. 각 세션은 같은 runtime/workspace에서 별도 identity와 private credential/MCP bridge를 사용해야 합니다. 스킬 설치는 session 등록이나 MCP 연결을 수행하지 않으며 설정/credential을 안내문에 기록하지 않습니다. 먼저 위 register/setup/doctor 절차로 각 도구를 연결하거나, 세션별 `DUREBAK_SESSION_FILE`과 CLI `call`을 사용하세요.
 
-동일한 생성 파일은 수정 없이 재사용합니다. 이미 수정한 파일과의 충돌은 `skill_conflict`로 중단하고, symlink 경로도 거부합니다. 이전 버전 스킬과 다르면 변경 내용을 비교·백업한 뒤 설치 대상을 명시적으로 정리해야 합니다. 설치 실패는 이 실행이 새로 만든 파일만 정리하며 다른 작성자의 파일을 삭제하지 않습니다. 글로벌 설정과 기존 호스트 설정은 덮어쓰지 않습니다.
+동일한 생성 파일은 재사용합니다. 공개 alpha.24의 원본과 바이트가 일치하는 `SKILL.md`는 새 스킬로 갱신하며 그 경로는 결과의 `updated`에 표시합니다. 내용이 수정됐거나 원본을 확인할 수 없으면 `skill_conflict`로 중단합니다. symlink 경로도 거부합니다. 해당 파일을 직접 조정할 때는 먼저 변경 내용과 백업을 확인하세요.
 
 이 경로들은 [Codex 공식 스킬 문서](https://developers.openai.com/codex/skills/), [Claude Code 공식 스킬 문서](https://code.claude.com/docs/en/skills), [OpenCode 공식 스킬](https://opencode.ai/docs/skills/) 및 [커맨드 문서](https://opencode.ai/docs/commands/)에 근거합니다. 생성·프로토콜 검증과 실제 호스트의 skill discovery/모델 호출 검증은 구분합니다. 자동 native 깨우기·중복 없는 활성 세션 연결은 이 설치 기능의 검증 범위가 아닙니다.
+
+#### Git 마켓플레이스에서 설치
+
+Claude Code와 Codex용 플러그인은 같은 스킬과 작업별 도구 안내를 담습니다. 위 세션별 설정 절차에 따라 두레박 런타임을 준비하고 각 세션의 MCP 연결을 구성하세요.
+
+- Claude Code 터미널에서 `claude plugin marketplace add ggujunhi247/durebak`에 이어 `claude plugin install durebak@durebak`을 실행합니다. 세션에서 `/durebak:durebak`으로 호출합니다. [Claude Code 마켓플레이스](https://code.claude.com/docs/en/plugin-marketplaces)
+- `codex plugin add`를 지원하는 Codex CLI에서 `codex plugin marketplace add ggujunhi247/durebak`에 이어 `codex plugin add durebak@durebak`을 실행합니다. 새 세션의 스킬 목록에서 Durebak을 선택합니다. [Codex 마켓플레이스](https://developers.openai.com/plugins/build/plugins#how-local-marketplaces-work)

@@ -8,7 +8,11 @@ export default {
   },
   classifyFrame(frame) {
     if(frame.error==='authentication_failed')return {error:'authentication_failed'};
-    if(frame.type==='result')return {error:frame.is_error?'host_reported_error':null,usage:usage('claude-code',frame.usage,['input_tokens','output_tokens','cache_creation_input_tokens','cache_read_input_tokens']),cost_usd:Number.isFinite(frame.total_cost_usd)?frame.total_cost_usd:null};
+    if(frame.type==='result'){
+      const limited=typeof frame.result==='string'&&/^You['’]ve hit your (?:daily|weekly|monthly) limit\b/i.test(frame.result.trimStart());
+      const error=frame.is_error?(limited?'usage_limit_reached':'host_reported_error'):null;
+      return {error,usage:usage('claude-code',frame.usage,['input_tokens','output_tokens','cache_creation_input_tokens','cache_read_input_tokens']),cost_usd:Number.isFinite(frame.total_cost_usd)?frame.total_cost_usd:null};
+    }
     if(frame.type==='user'&&frame.message?.content?.some(part=>part.type==='tool_result'&&part.is_error))return {error:'tool_failed'};
     return null;
   }

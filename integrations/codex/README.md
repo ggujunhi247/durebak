@@ -1,6 +1,6 @@
 # codex integration
 
-Build/install the runtime first, start the daemon and register a unique participant as shown in [USAGE](../../docs/USAGE.md). The following uses the locally built CLI until npm is publicly released:
+Install the [npm alpha runtime](../../README.md#시작하기) or build from source, then start the daemon and register a unique participant as shown in [USAGE](../../docs/USAGE.md). These examples use the local build:
 
 ```sh
 node dist/cli.js doctor --session /absolute/private/session.json
@@ -11,7 +11,7 @@ The output is a TOML configuration fragment. For an isolated CLI profile, place 
 
 `setup` creates a new 0600 file, refuses to overwrite an existing path and contains a credential path rather than a token. It pins the current Node and CLI paths. After moving/upgrading the runtime, regenerate into a new file and restart the host. Remove only your generated file/profile to undo this setup; revoke the credential when retiring a participant. Do not commit these files.
 
-See [compatibility](../../docs/COMPATIBILITY.md) for evidence and limits. Runtime configuration is independent of the optional [shared skill](../../plugins/durebak/skills/durebak/SKILL.md).
+See [compatibility](../../docs/COMPATIBILITY.md) for evidence and limits. Install the optional shared skill through the [Git marketplace](../../docs/USAGE.md#git-마켓플레이스에서-설치) and configure the runtime for each participant separately.
 
 Harness selection and live-test limitations: see [compatibility matrix](../../docs/COMPATIBILITY.md#heterogeneous-matrix). Use `--harness codex`; legacy flags remain compatible.
 
