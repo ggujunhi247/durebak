@@ -25,5 +25,6 @@ export async function probeCommand(command,authArgs,signal) {
 }
 const toolNames=new Set(['send','receive','ack','task_get','task_claim','artifact_put','task_complete'].flatMap(name=>[`durebak_${name}`,`durebak_durebak_${name}`]));
 export const safeTool=name=>toolNames.has(name)?name:'unknown';
-const failures=new Set(['authentication_failed','authentication_required','not_installed','model_required','configuration_unverified','timeout','cancelled','output_limit','spawn_failed','tool_failed','host_reported_error','host_failed','queue_not_pending','queue_wait_timeout','cleanup_failed']);
+export const hostBlockReasons=new Set(['authentication_failed','usage_limit_reached']);
+const failures=new Set([...hostBlockReasons,'authentication_required','not_installed','model_required','configuration_unverified','timeout','cancelled','output_limit','spawn_failed','tool_failed','host_reported_error','host_failed','queue_not_pending','queue_wait_timeout','cleanup_failed']);
 export const safeFailure=message=>failures.has(message)?message:'lab_failed';

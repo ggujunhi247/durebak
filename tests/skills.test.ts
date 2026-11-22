@@ -16,6 +16,38 @@ test('codex and opencode share the same installed skill without overwriting unre
 test('any modified existing target aborts the complete install before new files are written',t=>{
  const root=fixture(t);mkdirSync(join(root,'.opencode/commands'),{recursive:true});writeFileSync(join(root,'.opencode/commands/durebak.md'),'user custom command');assert.throws(()=>installSkills('all',root),/skill_conflict/);assert.ok(!existsSync(join(root,'.agents/skills/durebak/SKILL.md')));assert.equal(readFileSync(join(root,'.opencode/commands/durebak.md'),'utf8'),'user custom command');
 });
+test('the alpha.24 skill upgrades by exact content, while an edited copy blocks the whole install',t=>{
+ const root=fixture(t);
+ const baseline=readFileSync(new URL('./fixtures/skills/alpha.24.SKILL.md',import.meta.url),'utf8').replaceAll('\r\n','\n');
+ const codex=join(root,'.agents/skills/durebak/SKILL.md'),claude=join(root,'.claude/skills/durebak/SKILL.md');
+ for(const path of [codex,claude])mkdirSync(join(path,'..'),{recursive:true});
+ writeFileSync(codex,baseline);
+ writeFileSync(claude,baseline+'Local edit.\n');
+ assert.throws(()=>installSkills('all',root),/skill_conflict/);
+ assert.equal(readFileSync(codex,'utf8'),baseline);
+ assert.equal(readFileSync(claude,'utf8'),baseline+'Local edit.\n');
+ writeFileSync(claude,baseline);
+ assert.deepEqual(installSkills('all',root).updated.sort(),[codex,claude].sort());
+ assert.match(readFileSync(codex,'utf8'),/For a first exchange/);
+ assert.equal(readFileSync(codex,'utf8'),readFileSync(claude,'utf8'));
+ assert.deepEqual(installSkills('all',root).updated,[]);
+});
+test('a failed second replacement rolls back the first skill and the new files',async t=>{
+ const root=fixture(t);
+ const baseline=readFileSync(new URL('./fixtures/skills/alpha.24.SKILL.md',import.meta.url),'utf8').replaceAll('\r\n','\n');
+ const codex=join(root,'.agents/skills/durebak/SKILL.md'),claude=join(root,'.claude/skills/durebak/SKILL.md');
+ for(const path of [codex,claude]){mkdirSync(join(path,'..'),{recursive:true});writeFileSync(path,baseline);}
+ const fs=(await import('node:fs')).default,{syncBuiltinESMExports}=await import('node:module'),rename=fs.renameSync;
+ t.mock.method(fs,'renameSync',(from:Parameters<typeof fs.renameSync>[0],to:Parameters<typeof fs.renameSync>[1])=>{
+  if(String(to)===claude)throw new Error('replacement failed');
+  rename(from,to);
+ });
+ syncBuiltinESMExports();
+ try{assert.throws(()=>installSkills('all',root),/replacement failed/);}finally{t.mock.restoreAll();syncBuiltinESMExports();}
+ assert.equal(readFileSync(codex,'utf8'),baseline);
+ assert.equal(readFileSync(claude,'utf8'),baseline);
+ assert.ok(!existsSync(join(root,'.opencode/commands/durebak.md')));
+});
 test('symlinked discovery paths are refused and their targets stay untouched',t=>{
  const root=fixture(t),outside=join(root,'outside');mkdirSync(outside);symlinkSync(outside,join(root,'.agents'),'dir');assert.throws(()=>installSkills('codex',root),/unsafe_skill_path/);assert.ok(!existsSync(join(outside,'skills')));
 });

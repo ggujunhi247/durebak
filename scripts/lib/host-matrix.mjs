@@ -9,14 +9,14 @@ function hasCompleteEvidence(evidence,worker,reviewer) {
   }
   return required.every(name=>names.has(name));
 }
-export async function runMatrix({live=false,probe,runPair,signal}) {
+export async function runMatrix({live=false,selectedPairs=pairs,probe,runPair,signal}) {
   const hosts={},blocked=new Map(),results=[];
-  for(const id of ['codex','claude-code','opencode']){
+  for(const id of new Set(selectedPairs.flat())){
     signal?.throwIfAborted();hosts[id]=await probe(id);
     if(!hosts[id].installed)blocked.set(id,'not_installed');
     else if(hosts[id].authEvidence==='none')blocked.set(id,'authentication_required');
   }
-  for(const [worker,reviewer] of pairs){
+  for(const [worker,reviewer] of selectedPairs){
     signal?.throwIfAborted();
     const unavailable=[worker,reviewer].find(id=>blocked.has(id));
     if(unavailable){results.push({worker,reviewer,status:'blocked',reason:blocked.get(unavailable),evidence:null});continue;}

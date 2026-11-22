@@ -9,9 +9,24 @@ npm ci
 npm run lab
 npm run lab:live
 npm run lab:live -- --reviewer codex
+npm run lab:matrix -- --worker codex --reviewer opencode
+npm run lab:matrix -- --live --worker codex --reviewer opencode --opencode-model PROVIDER/MODEL
+npm run lab:matrix -- --worker codex --reviewer agy
 ```
 
-`lab`은 공식 MCP SDK 프로세스 둘로 동작을 검증한다. 모델을 호출하지 않는다. `lab:live`는 기본으로 로그인된 `codex`와 `claude`를 실제로 세 번 호출하며 계정 사용량이 발생한다. `--reviewer codex`로 서로 다른 Codex 참여자끼리 시험할 수도 있다. OpenCode는 이 하네스에서 실행하지 않는다. 실제 호스트 시험은 일반 `npm test`나 CI에서 자동으로 호출하지 않는다.
+`lab`은 공식 MCP SDK 프로세스 둘로 동작을 검증한다. `lab:live`는 기본으로 로그인된 `codex`와 `claude`를 실제로 세 번 호출하며 계정 사용량이 발생한다. `--reviewer codex`로 서로 다른 Codex 참여자끼리 시험할 수 있다. OpenCode는 명시적인 모델과 격리 프로필에서 접근할 수 있는 인증을 사용한다. 일반 `npm test`에는 모델 호출이 없다.
+
+`lab:matrix`에 `--worker`와 `--reviewer`를 함께 주면 지정한 방향만 확인한다. `--live` 없이 실행하면 모델을 호출하지 않는다. 전체 매트릭스는 `agy`의 설치·버전을 후보 정보로 보고한다.
+
+### Antigravity 리뷰어 시험
+
+로그인된 전용 agy 홈으로 Codex → agy → Codex를 명시적으로 실행합니다. 홈은 현재 OS 사용자가 소유한 0700 디렉터리여야 합니다. 그 홈의 `.gemini/antigravity-cli`에는 인증 상태를 두고, 테스트가 사용할 `settings.json`과 MCP 구성은 비워 둡니다. 전용 홈에 다른 MCP나 플러그인 설정이 있으면 시험이 중단됩니다.
+
+```sh
+npm run lab:matrix -- --live --worker codex --reviewer agy --agy-home /absolute/private/agy-test-home
+```
+
+시험 동안 리뷰어에게 `receive`, `ack`, `send`만 허용하며 완료 후 시험용 설정 파일을 제거합니다. 홈을 지정하지 않거나 agy를 요청 발신자로 고르면 `configuration_unverified`로 중단합니다. 일반 매트릭스의 여섯 조합은 그대로 실행됩니다.
 
 보고서를 보존하려면:
 
