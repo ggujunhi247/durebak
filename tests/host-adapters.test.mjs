@@ -57,7 +57,7 @@ test('effective OpenCode config rejects changed identity and broadened permissio
 });
 
 test('launch configs preserve private unicode paths and constrain all hosts',async t=>{
-  const {mkdtempSync,rmSync,writeFileSync}=await import('node:fs');
+  const {mkdtempSync,rmSync,writeFileSync,mkdirSync,realpathSync,existsSync,readFileSync}=await import('node:fs');
   const {tmpdir}=await import('node:os');const {join}=await import('node:path');
   const {startRuntime}=await import('../dist/runtime.js');const {adminCall}=await import('../dist/client.js');
   const root=mkdtempSync(join(tmpdir(),'durebak 한글 ')),data=join(root,'data');
@@ -72,6 +72,15 @@ test('launch configs preserve private unicode paths and constrain all hosts',asy
     if(id==='claude-code')assert.ok(invocation.args.includes('--strict-mcp-config'));
     if(id==='codex')assert.ok(invocation.args.includes('--ignore-user-config'));
   }
+  const agyHome=join(realpathSync(root),'agy-home');
+  const gemini=join(agyHome,'.gemini'),profile=join(gemini,'antigravity-cli');
+  for(const path of [agyHome,gemini,profile])mkdirSync(path,{mode:0o700});
+  const invocation=getHostAdapter('agy').buildInvocation({sessionFile:file,workspace:root,configDir:root,allowedTools:['receive','ack','send'],agyHome});
+  const settings=join(profile,'settings.json');
+  writeFileSync(settings,JSON.stringify(JSON.parse(readFileSync(settings,'utf8')),null,2));
+  invocation.dispose();
+  assert.equal(existsSync(settings),false);
+  assert.equal(existsSync(join(gemini,'config/mcp_config.json')),false);
 });
 
 test('unrecognized tool names and unexpected errors cannot leak into public reports',async()=>{
