@@ -16,6 +16,26 @@ test('unknown events and missing usage are not fabricated as successful evidence
     assert.deepEqual(summarizeFrames(id,[]),{tools:[],usage:null,error:null});
   }
 });
+test('Antigravity frames accept only the reviewer tools and the review permission mode',()=>{
+  const agy=getHostAdapter('agy');
+  assert.equal(agy.id,'antigravity-cli');
+  assert.equal(agy.classifyFrame({event:'init',init:{permission_mode:'request-review',tools:['mcp_durebak_durebak_receive']}}),null);
+  for(const init of [{permission_mode:'always-proceed',tools:[]},{permission_mode:'request-review',tools:['mcp_other_read']}]){
+    assert.equal(agy.classifyFrame({event:'init',init}).error,'configuration_unverified');
+  }
+  const step_update={state:'DONE',step_type:'tool',tool_name:'mcp_durebak_durebak_ack'};
+  assert.equal(agy.classifyFrame({event:'step_update',step_update}).tool.name,'durebak_ack');
+  assert.equal(agy.classifyFrame({event:'step_update',step_update:{...step_update,tool_name:'run_command'}}).error,'configuration_unverified');
+});
+test('Claude usage-limit results stay classified after generic errors without retaining account details',()=>{
+  const summary=summarizeFrames('claude-code',[
+    {type:'result',is_error:true,result:"You've hit your weekly limit · resets at private time"},
+    {type:'result',is_error:true,result:'unrelated shutdown error'},
+  ]);
+  assert.equal(summary.error,'usage_limit_reached');
+  assert.ok(!JSON.stringify(summary).includes('private time'));
+  assert.equal(summarizeFrames('claude-code',[{type:'result',is_error:false,result:"You've hit your weekly limit"}]).error,null);
+});
 test('authentication failure and failed tools survive successful process exits without retaining text',()=>{
   assert.equal(summarizeFrames('claude',[{type:'result',error:'authentication_failed',result:'secret'}]).error,'authentication_failed');
   const codex=summarizeFrames('codex',[{type:'item.completed',item:{type:'mcp_tool_call',server:'durebak',tool:'durebak_send',status:'failed',arguments:'secret'}}]);

@@ -7,12 +7,13 @@ import { randomUUID,createHash } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { startRuntime } from '../dist/runtime.js';
-import { safeFailure } from './lib/host-adapters/common.mjs';
+import { hostBlockReasons,safeFailure } from './lib/host-adapters/common.mjs';
+import { validateAgyHome } from './lib/host-adapters/antigravity-cli.mjs';
 import { getHostAdapter,summarizeFrames } from './lib/host-adapters/index.mjs';
 import { adminCall,sessionCall } from '../dist/client.js';
 import { runBounded,inspectExchange,reserveReport } from './lib/host-lab.mjs';
 
-const {values}=parseArgs({options:{mode:{type:'string',default:'mcp'},worker:{type:'string',default:'codex'},reviewer:{type:'string',default:'claude'},'worker-model':{type:'string'},'reviewer-model':{type:'string'},report:{type:'string'},'timeout-ms':{type:'string',default:'90000'}}});
+const {values}=parseArgs({options:{mode:{type:'string',default:'mcp'},worker:{type:'string',default:'codex'},reviewer:{type:'string',default:'claude'},'worker-model':{type:'string'},'reviewer-model':{type:'string'},'agy-home':{type:'string'},report:{type:'string'},'timeout-ms':{type:'string',default:'90000'}}});
 if(!['mcp','live'].includes(values.mode))throw new Error('mode must be mcp or live');
 values.worker=getHostAdapter(values.worker).id;values.reviewer=getHostAdapter(values.reviewer).id;
 const timeoutMs=Number(values['timeout-ms']);
@@ -53,21 +54,26 @@ async function hostStep(provider,label,file,allowedTools,prompt) {
   const adapter=getHostAdapter(provider);
   const model=label==='review'?values['reviewer-model']:values['worker-model'];
   let invocation;
-  try {invocation=adapter.buildInvocation({sessionFile:file,workspace,configDir:directory,allowedTools,model});}
-  catch(error){if(error.message==='model_required'){report.blocked_harness=provider;report.status='blocked';}throw error;}
+  try {invocation=adapter.buildInvocation({sessionFile:file,workspace,configDir:directory,allowedTools,model,agyHome:values['agy-home']});}
+  catch(error){if(['model_required','configuration_unverified'].includes(error.message)){report.blocked_harness=provider;report.status='blocked';}throw error;}
+  try{
   if(adapter.verifyConfiguration&&!await adapter.verifyConfiguration(invocation,{cwd:workspace,signal:controller.signal})){
     report.blocked_harness=provider;report.status='blocked';throw new Error('configuration_unverified');
   }
-  const result=await runBounded(invocation.command,invocation.args,{cwd:workspace,env:invocation.env,input:`Synthetic Durebak integration test. Use only the provided MCP tools. No shell, files, web, other servers, or delegation. Perform exactly the requested tool actions, then finish briefly.\n${prompt}\n`,timeoutMs,signal:controller.signal,classifyLine:line=>adapter.classifyFrame(JSON.parse(line))?.error==='authentication_failed'?'authentication_failed':null});
+  const result=await runBounded(invocation.command,invocation.args,{cwd:workspace,env:invocation.env,input:`Synthetic Durebak integration test. Use only the provided MCP tools. No shell, files, web, other servers, or delegation. Perform exactly the requested tool actions, then finish briefly.\n${prompt}\n`,timeoutMs,signal:controller.signal,classifyLine:line=>{
+    const error=adapter.classifyFrame(JSON.parse(line))?.error;
+    return error==='authentication_failed'||error==='configuration_unverified'?error:null;
+  }});
   const frames=result.stdout.split('\n').flatMap(line=>{try{return[JSON.parse(line)];}catch{return[];}});
   const summary=summarizeFrames(provider,frames);
   const step={label,harness:provider,duration_ms:result.duration_ms,exit_code:result.code,reason:result.reason??summary.error,reported_usage:summary.usage,reported_cost_usd:summary.cost_usd??null,tool_calls:summary.tools,model_selection:model?'explicit':'host_default',budget_enforcement:provider==='claude-code'?'max_1_usd':'deadline_only'};
   report.steps.push(step);
   if(result.code!==0||step.reason){
-    if(step.reason==='authentication_failed'){report.status='blocked';report.blocked_harness=provider;}
+    if(hostBlockReasons.has(step.reason)||step.reason==='configuration_unverified'){report.status='blocked';report.blocked_harness=provider;}
     emit(`${label}: ${step.reason??'host_failed'} (raw transcripts discarded)`);
     throw new Error(step.reason??'host_failed');
   }
+  }finally{invocation.dispose?.();}
 }
 async function waitForQueue(file) {
   const deadline=Date.now()+timeoutMs;
@@ -83,6 +89,12 @@ async function waitForQueue(file) {
 try {
   controller.signal.throwIfAborted();
   if(values.mode==='live'){
+    if([values.worker,values.reviewer].includes('antigravity-cli')){
+      try{
+        if(values.worker!=='codex'||values.reviewer!=='antigravity-cli')throw new Error('configuration_unverified');
+        validateAgyHome(values['agy-home']);
+      }catch(error){report.status='blocked';report.blocked_harness='antigravity-cli';throw error;}
+    }
     for(const provider of new Set([values.worker,values.reviewer])){
       const probe=await getHostAdapter(provider).probe({signal:controller.signal});
       report.hosts[provider]=probe;controller.signal.throwIfAborted();
@@ -95,7 +107,7 @@ try {
   controller.signal.throwIfAborted();
   runtime=await startRuntime(data);
   const worker=await register('worker',values.mode==='live'?(values.worker==='claude-code'?'claude':values.worker):'other');
-  const reviewer=await register('reviewer',values.mode==='live'?(values.reviewer==='claude-code'?'claude':values.reviewer):'other');
+  const reviewer=await register('reviewer',values.mode==='live'?(values.reviewer==='claude-code'?'claude':values.reviewer==='antigravity-cli'?'other':values.reviewer):'other');
   const task=await sessionCall(worker.file,'task_create',{title:'Review and correct arithmetic candidate',criteria:'Persist the exact corrected result only after a correlated reviewer correction.',key:'probe-task'});
   if(values.mode==='live'){
     await hostStep(values.worker,'request',worker.file,['send'],`Call durebak_send with exactly ${JSON.stringify({to:reviewer.session.id,body:expected.request,key:'probe-request'})}.`);
