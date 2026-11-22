@@ -6,6 +6,7 @@
 - Upgrade an unchanged alpha.24 skill by its published content fingerprint and report updated paths.
 - Add a two-session first-exchange walkthrough, selected host-pair testing, and an opt-in Antigravity reviewer with an isolated profile.
 - Stop retrying Claude combinations in a matrix after its weekly usage limit is reported.
+- Refresh runtime dependencies to versions that pass the production dependency audit.
 
 ## 0.1.0-alpha.24 — 2026-10-11
 
