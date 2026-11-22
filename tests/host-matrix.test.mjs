@@ -8,9 +8,26 @@ test('six unique directed pairs and probe never invokes a model',async()=>{
   const result=await runMatrix({probe:ready,runPair:()=>{throw Error('paid call');}});
   assert.equal(result.status,'not-tested');assert.ok(result.pairs.every(pair=>pair.status==='not-tested'));
 });
-test('authentication failure blocks later combinations without repeated paid attempts',async()=>{
-  let calls=0;const result=await runMatrix({live:true,probe:ready,runPair:async(worker,reviewer)=>{calls++;return worker==='claude-code'||reviewer==='claude-code'?{status:'blocked',blocked_harness:'claude-code',error:'authentication_failed'}:{status:'passed',mode:'live',worker,reviewer,checks};}});
-  assert.equal(calls,3);assert.equal(result.status,'blocked');assert.equal(result.pairs.filter(p=>p.status==='blocked').length,4);
+test('a selected Codex and OpenCode pair probes and runs only the requested hosts',async()=>{
+  const probed=[],called=[];
+  const result=await runMatrix({live:true,selectedPairs:[['codex','opencode']],probe:async id=>{probed.push(id);return ready();},runPair:async(worker,reviewer)=>{
+    called.push([worker,reviewer]);return {status:'passed',mode:'live',worker,reviewer,checks};
+  }});
+  assert.deepEqual(probed,['codex','opencode']);
+  assert.deepEqual(called,[['codex','opencode']]);
+  assert.equal(result.status,'passed');
+});
+test('account blocks skip later combinations without repeated paid attempts',async()=>{
+  for(const error of ['authentication_failed','usage_limit_reached']){
+    let calls=0;
+    const result=await runMatrix({live:true,probe:ready,runPair:async(worker,reviewer)=>{
+      calls++;
+      return [worker,reviewer].includes('claude-code')?{status:'blocked',blocked_harness:'claude-code',error}:{status:'passed',mode:'live',worker,reviewer,checks};
+    }});
+    assert.equal(calls,3);
+    assert.equal(result.status,'blocked');
+    assert.equal(result.pairs.filter(p=>p.status==='blocked'&&p.reason===error).length,4);
+  }
 });
 test('exit success and claimed pass cannot replace all persisted checks or live identity',async()=>{
   for(const invalid of [{status:'passed'},{status:'passed',mode:'mcp',checks},{status:'passed',mode:'live',checks:checks.slice(1)}]){

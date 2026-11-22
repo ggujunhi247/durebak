@@ -16,6 +16,26 @@ test('unknown events and missing usage are not fabricated as successful evidence
     assert.deepEqual(summarizeFrames(id,[]),{tools:[],usage:null,error:null});
   }
 });
+test('Antigravity frames accept only the reviewer tools and the review permission mode',()=>{
+  const agy=getHostAdapter('agy');
+  assert.equal(agy.id,'antigravity-cli');
+  assert.equal(agy.classifyFrame({event:'init',init:{permission_mode:'request-review',tools:['mcp_durebak_durebak_receive']}}),null);
+  for(const init of [{permission_mode:'always-proceed',tools:[]},{permission_mode:'request-review',tools:['mcp_other_read']}]){
+    assert.equal(agy.classifyFrame({event:'init',init}).error,'configuration_unverified');
+  }
+  const step_update={state:'DONE',step_type:'tool',tool_name:'mcp_durebak_durebak_ack'};
+  assert.equal(agy.classifyFrame({event:'step_update',step_update}).tool.name,'durebak_ack');
+  assert.equal(agy.classifyFrame({event:'step_update',step_update:{...step_update,tool_name:'run_command'}}).error,'configuration_unverified');
+});
+test('Claude usage-limit results stay classified after generic errors without retaining account details',()=>{
+  const summary=summarizeFrames('claude-code',[
+    {type:'result',is_error:true,result:"You've hit your weekly limit · resets at private time"},
+    {type:'result',is_error:true,result:'unrelated shutdown error'},
+  ]);
+  assert.equal(summary.error,'usage_limit_reached');
+  assert.ok(!JSON.stringify(summary).includes('private time'));
+  assert.equal(summarizeFrames('claude-code',[{type:'result',is_error:false,result:"You've hit your weekly limit"}]).error,null);
+});
 test('authentication failure and failed tools survive successful process exits without retaining text',()=>{
   assert.equal(summarizeFrames('claude',[{type:'result',error:'authentication_failed',result:'secret'}]).error,'authentication_failed');
   const codex=summarizeFrames('codex',[{type:'item.completed',item:{type:'mcp_tool_call',server:'durebak',tool:'durebak_send',status:'failed',arguments:'secret'}}]);
@@ -37,7 +57,7 @@ test('effective OpenCode config rejects changed identity and broadened permissio
 });
 
 test('launch configs preserve private unicode paths and constrain all hosts',async t=>{
-  const {mkdtempSync,rmSync,writeFileSync}=await import('node:fs');
+  const {mkdtempSync,rmSync,writeFileSync,mkdirSync,realpathSync,existsSync,readFileSync}=await import('node:fs');
   const {tmpdir}=await import('node:os');const {join}=await import('node:path');
   const {startRuntime}=await import('../dist/runtime.js');const {adminCall}=await import('../dist/client.js');
   const root=mkdtempSync(join(tmpdir(),'durebak 한글 ')),data=join(root,'data');
@@ -52,6 +72,15 @@ test('launch configs preserve private unicode paths and constrain all hosts',asy
     if(id==='claude-code')assert.ok(invocation.args.includes('--strict-mcp-config'));
     if(id==='codex')assert.ok(invocation.args.includes('--ignore-user-config'));
   }
+  const agyHome=join(realpathSync(root),'agy-home');
+  const gemini=join(agyHome,'.gemini'),profile=join(gemini,'antigravity-cli');
+  for(const path of [agyHome,gemini,profile])mkdirSync(path,{mode:0o700});
+  const invocation=getHostAdapter('agy').buildInvocation({sessionFile:file,workspace:root,configDir:root,allowedTools:['receive','ack','send'],agyHome});
+  const settings=join(profile,'settings.json');
+  writeFileSync(settings,JSON.stringify(JSON.parse(readFileSync(settings,'utf8')),null,2));
+  invocation.dispose();
+  assert.equal(existsSync(settings),false);
+  assert.equal(existsSync(join(gemini,'config/mcp_config.json')),false);
 });
 
 test('unrecognized tool names and unexpected errors cannot leak into public reports',async()=>{

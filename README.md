@@ -6,7 +6,7 @@ Local, durable collaboration between coding-agent sessions. Experimental alpha f
 
 두레박은 같은 컴퓨터의 코딩 에이전트 세션이 메시지·작업·결과를 주고받는 로컬 협업 런타임입니다. 각 세션은 자기 호스트와 맥락을 유지하고, CLI 또는 MCP로 참여합니다.
 
-**현재 소스: 0.1.0-alpha.24. 사용자용 협업은 Cooperative 모드입니다.** SQLite 저장소, 인증된 loopback 서버, CLI, MCP stdio bridge가 구현되어 있습니다. 실제 MCP 프로세스 간 통신을 테스트했으며, 호스트별 실제 시험 결과와 제약은 [호스트 테스트](docs/HOST-TESTING.md)에 기록합니다. 요청별 대화·기한·취소 notice·checkpoint, 공유 preview, 보호 작업·비공개 텍스트 첨부, revision별 자기보고 검증·재검증과 CLI 협업 화면을 제공합니다. 내부 실험용 Codex·OpenCode 소유 호스트와 실행 ledger, 비동기 준비 상태 검사도 개발 중입니다. 이 내부 구성의 실제 모델 실행·controller 연결·자동 깨우기는 아직 검증하지 않았습니다. 자동 세션 실행·깨우기와 반복 작업 스케줄러는 후속 기능입니다.
+**현재 소스: 0.1.0-alpha.25. 사용자용 협업은 Cooperative 모드입니다.** SQLite 저장소, 인증된 loopback 서버, CLI, MCP stdio bridge가 구현되어 있습니다. 실제 MCP 프로세스 간 통신을 테스트했으며, 호스트별 실제 시험 결과와 제약은 [호스트 테스트](docs/HOST-TESTING.md)에 기록합니다. 요청별 대화·기한·취소 notice·checkpoint, 공유 preview, 보호 작업·비공개 텍스트 첨부, revision별 자기보고 검증·재검증과 CLI 협업 화면을 제공합니다. 내부 실험용 Codex·OpenCode 소유 호스트와 실행 ledger, 비동기 준비 상태 검사도 개발 중입니다. 이 내부 구성의 실제 모델 실행·controller 연결·자동 깨우기는 아직 검증하지 않았습니다. 자동 세션 실행·깨우기와 반복 작업 스케줄러는 후속 기능입니다.
 
 npm·GitHub 설치/업데이트 경로, 릴리스 구독과 alpha.24의 `update-check`·opt-in 알림은 [설치·업데이트 안내](https://github.com/ggujunhi247/durebak/blob/main/docs/INSTALLATION.md)를 참고하세요.
 
@@ -34,12 +34,13 @@ node dist/cli.js --help
 node dist/cli.js serve
 ```
 
-세션 등록, MCP 연결, 요청·답변과 결과 제출은 [사용법](docs/USAGE.md)을 따릅니다. 새 설치는 사용자 홈의 `~/.durebak`에 데이터를 보관합니다. 기존 데이터 위치와 명시적인 경로 설정은 유지합니다. `register`와 `export`에서 `--out`을 생략하면 인증 파일과 기록도 같은 데이터 디렉터리에 저장됩니다. `npx --yes durebak@alpha paths`로 실제 위치를 확인할 수 있습니다.
+서버를 띄운 뒤 [두 세션으로 첫 요청과 답장을 주고받아](docs/USAGE.md#4-cli로-첫-요청-왕복) 연결을 확인하세요. 각 에이전트의 MCP 연결과 결과 제출 절차는 [사용법](docs/USAGE.md)에 있습니다. 새 설치는 사용자 홈의 `~/.durebak`에 데이터를 보관합니다. 기존 데이터 위치와 명시적인 경로 설정은 유지합니다. `register`와 `export`에서 `--out`을 생략하면 인증 파일과 기록도 같은 데이터 디렉터리에 저장됩니다. `npx --yes durebak@alpha paths`로 실제 위치를 확인할 수 있습니다.
 
 ## 검증 상태
 
 - 실제 Codex → Codex 요청·검토·결과 제출을 검증했습니다.
-- Claude Code·OpenCode 설정 어댑터와 6방향 시험 도구를 제공합니다. **이종 모델 간 실통신 성공은 아직 검증하지 못했습니다.**
+- 격리된 WSL 환경에서 Codex → Antigravity CLI(agy) → Codex 왕복을 검증했습니다. agy는 임시 구성에서 리뷰어로 참여했습니다.
+- Claude Code·OpenCode 설정 어댑터와 6방향 시험 도구를 제공합니다. 두 호스트의 이종 모델 왕복은 검증 중입니다.
 - 자동 테스트와 실제 MCP 프로세스 왕복 검사를 통과했습니다. [Linux·macOS 원격 CI](https://github.com/ggujunhi247/durebak/actions)에서도 테스트와 패키지 검사를 통과했습니다.
 - `durebak dashboard --session FILE`에서 원문 없이 연락·요청·검증 상태를 확인합니다. bridge 접촉은 실제 host 준비 증거가 아닙니다.
 - 자동 세션 깨우기·네이티브 대화 재개·무인 반복 개선은 아직 지원하지 않습니다.
@@ -93,6 +94,6 @@ npm run lab
 
 메시지 전달 정책: [큐·중요도·대기·확인 규칙](docs/QUEUE-POLICY.md). 새 클라이언트는 `receive`와 `ack(id,receipt)`를 사용한다.
 
-### 협업 스킬 (개발 소스)
+### 협업 스킬
 
-`durebak skills --harness all --workspace PROJECT`로 Codex·Claude Code·OpenCode용 공통 협업 안내와 호출 entry point를 설치합니다. Codex는 `$durebak`, Claude Code/OpenCode는 `/durebak`에서 요청·받기·응답·검증을 진행합니다. 각 세션의 별도 MCP/credential 연결은 필요하며 자동 native 깨우기는 아직 지원하지 않습니다. [설치·사용 계약](docs/USAGE.md#협업-스킬과-커맨드-schema10-개발-소스)을 참고하세요.
+`npx --yes durebak@alpha skills --harness all --workspace PROJECT`로 Codex·Claude Code·OpenCode용 협업 스킬을 설치합니다. Claude Code와 Codex는 Git 마켓플레이스에서도 같은 스킬을 설치할 수 있습니다. 각 세션은 별도로 발급한 자격 증명으로 MCP를 연결합니다. [스킬 설치와 호출 방법](docs/USAGE.md#협업-스킬과-커맨드)
