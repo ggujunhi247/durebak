@@ -11,6 +11,7 @@ import {ScopedAttachments,attachmentPutSchema} from './scoped-attachments.js';
 import {ManagedControl,managedBindSchema,managedPolicySchema} from './managed-control.js';
 import type {CollaborationStatus} from './collaboration-status.js';
 import {Verification,revisionSchema,evidenceSchema} from './verification.js';
+import {ReviewRecords,reviewSchema,deploymentSchema} from './review-records.js';
 import {ProtectedTasks} from './protected-tasks.js';
 import {RequestPreviewRepository} from './request-preview.js';
 import { RequestRepository,requestPayloadSchema,requestCreateSchema,requestMessageSchema,checkpointSchema,type RequestState } from './requests.js';
@@ -30,6 +31,7 @@ export class Store {
   private readonly protectedTasks:ProtectedTasks;
   private readonly managed:ManagedControl;
   private readonly verification:Verification;
+  private readonly reviews:ReviewRecords;
   private readonly previews: RequestPreviewRepository;
   constructor(readonly directory: string, private readonly clock = { now: () => Date.now() }) {
     this.db = openDatabase(directory);
@@ -38,6 +40,7 @@ export class Store {
     this.protectedTasks=new ProtectedTasks(this.db);
     this.previews=new RequestPreviewRepository(this.db,this.clock,this.attachments);
     this.verification=new Verification(this.db,this.clock,(actor,id,now)=>this.requests.get(actor,id,now));
+    this.reviews=new ReviewRecords(this.db,this.clock,(actor,id,now)=>this.requests.get(actor,id,now));
     this.requests=new RequestRepository(this.db,this.clock,(actor,input,now)=>this.enqueue(actor,input,now),(actor,id,payload,now)=>this.previews.validate(actor,id,payload,now),this.protectedTasks,this.attachments);
   }
   close() { if (!this.closed) { this.db.close(); this.closed = true; } }
@@ -106,7 +109,17 @@ export class Store {
     const now=this.clock.now(),sessions=this.sessions(actor,data.sessionAfter,20),requests=this.requests.list(actor,data.requestAfter,10,now);
     return {mode:'cooperative',auto_wake:false,observed_at:now,self:this.sessionHealth(actor,actor.id,epoch,now),
       sessions:{...sessions,items:sessions.items.map(s=>{const health=this.sessionHealth(actor,s.id,epoch,now),alias=encodedPreview(s.alias,100);return {id:s.id,alias,alias_truncated:alias!==s.alias,provider:s.provider,availability:health.availability,bridge:health.bridge.state,duplicate_bridge:health.bridge.duplicate,last_contact_at:health.bridge.last_seen_at};})},
-      requests:{...requests,items:requests.items.map(q=>{const verification=this.verification.status(actor,q.id,now);return {id:q.id,state:q.state,version:q.version,creator:q.creator,recipient:q.recipient,deadline_at:q.deadline_at,task_state:q.task?.state??null,task_version:q.task?.version??null,verification:verification.status,needs_attention:verification.needs_attention};})}};
+      requests:{...requests,items:requests.items.map(q=>{
+        const verification=this.verification.status(actor,q.id,now),review=this.reviews.summary(actor,q.id,now);
+        const attempt=this.one<{status:string}>(`SELECT COALESCE(driver_outcome,state) AS status FROM work_attempts
+          WHERE request_id=? ORDER BY (state='unknown') DESC, (active_released=0) DESC, rowid DESC LIMIT 1`,q.id);
+        const deployment=review.latest_deployment?'reported_'+review.latest_deployment.outcome:'not_reported';
+        return {id:q.id,state:q.state,version:q.version,creator:q.creator,recipient:q.recipient,deadline_at:q.deadline_at,
+          task_state:q.task?.state??null,task_version:q.task?.version??null,execution:attempt?.status??'not_observed',
+          execution_source:attempt?'mock_managed_ledger' as const:null,
+          verification:verification.status,review:review.status,deployment,
+          needs_attention:verification.needs_attention||attempt?.status==='unknown'||attempt?.status==='failed'||review.status==='changes_requested'||review.status==='needs_review'||deployment==='reported_failed'};
+      })}};
     });
   }
   send(actor: Session, input: z.input<typeof sendSchema>): Message { return this.transaction(()=>this.enqueue(actor,input)); }
@@ -124,6 +137,10 @@ export class Store {
   requestEvidenceRead(actor:Session,id:string,offset=0,limit=4096){return this.verification.read(actor,id,offset,limit);}
   requestBundle(actor:Session,id:string){return this.verification.bundle(actor,id);}
   requestVerification(actor:Session,id:string){return this.verification.status(actor,id);}
+  requestReview(actor:Session,input:z.input<typeof reviewSchema>){return this.reviews.addReview(actor,input);}
+  requestDeployment(actor:Session,input:z.input<typeof deploymentSchema>){return this.reviews.addDeployment(actor,input);}
+  requestReviewStatus(actor:Session,id:string){return this.reviews.status(actor,id);}
+  requestReviewHistory(actor:Session,id:string,reviewAfter:number,deploymentAfter:number,limit:number){return this.reviews.history(actor,id,reviewAfter,deploymentAfter,limit);}
   requestTaskRead(actor:Session,id:string,offset=0,limit=4096){return this.requests.taskRead(actor,id,offset,limit);}
   requestGet(actor:Session,id:string){return this.requests.get(actor,id);}
   requestList(actor:Session,after='',limit=10){return this.requests.list(actor,after,limit);}
