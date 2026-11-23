@@ -60,6 +60,25 @@ test('partial file writes roll back owned files and leave a clean retry',async t
  try{assert.throws(()=>installSkills('codex',root),/disk full/);assert.ok(!existsSync(join(root,'.agents/skills/durebak/SKILL.md')));}finally{t.mock.restoreAll();syncBuiltinESMExports();}
  assert.equal(installSkills('codex',root).created.length,2);
 });
+test('rollback preserves a file another writer replaced after installation started',async t=>{
+ const root=fixture(t);
+ const skill=join(root,'.agents/skills/durebak/SKILL.md');
+ const reference=join(root,'.agents/skills/durebak/references/operations.md');
+ const fs=(await import('node:fs')).default,{syncBuiltinESMExports}=await import('node:module'),write=fs.writeFileSync;
+ let fileWrites=0;
+ t.mock.method(fs,'writeFileSync',(target:Parameters<typeof write>[0],data:Parameters<typeof write>[1],options:Parameters<typeof write>[2])=>{
+  if(typeof target==='number'&&++fileWrites===2){
+   fs.renameSync(skill,join(root,'original-skill.md'));
+   write(skill,'Other writer replacement.\n');
+   throw new Error('second write failed');
+  }
+  write(target,data,options);
+ });
+ syncBuiltinESMExports();
+ try{assert.throws(()=>installSkills('codex',root),/second write failed/);}finally{t.mock.restoreAll();syncBuiltinESMExports();}
+ assert.equal(readFileSync(skill,'utf8'),'Other writer replacement.\n');
+ assert.ok(!existsSync(reference));
+});
 test('a competing exclusive creator is preserved instead of being claimed by rollback',async t=>{
  const root=fixture(t),fs=(await import('node:fs')).default,{syncBuiltinESMExports}=await import('node:module'),original=fs.openSync,write=fs.writeFileSync;
  t.mock.method(fs,'openSync',(path:Parameters<typeof fs.openSync>[0],flags:Parameters<typeof fs.openSync>[1],mode:Parameters<typeof fs.openSync>[2])=>{if(flags==='wx'&&String(path).endsWith('/SKILL.md')){const fd=original(path,'wx');try{write(fd,'other writer');}finally{fs.closeSync(fd);}}return original(path,flags,mode);});syncBuiltinESMExports();

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.26 — 2026-11-23
+
+- Add a per-directory maintenance lock shared by the daemon and MCP bridge, and defer maintenance while managed work has an unresolved execution record.
+- Preserve independently replaced skill files during rollback and document how to prepare an isolated Antigravity profile.
+- Keep update notifications available. Automatic installation remains disabled pending operational release signing, installation ownership checks and independent recovery.
+
 ## 0.1.0-alpha.25 — 2026-11-23
 
 - Distribute the same Durebak skill and operations reference through the CLI and the shared Claude Code/Codex Git marketplace.

@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { Store } from './store.js';
 import { DomainError, fail, sendSchema, taskSchema, type Session } from './domain.js';
-import { privateDirectory } from './database.js';
+import { acquireMaintenanceGate } from './database.js';
 import {managedBindSchema,managedPolicySchema,managedRenewSchema} from './managed-control.js';
 import {revisionSchema,evidenceSchema} from './verification.js';
 import {attachmentPutSchema} from './scoped-attachments.js';
@@ -148,7 +148,15 @@ function respond(res: ServerResponse, status: number, value: unknown) {
 }
 
 export async function startRuntime(directory: string) {
-  privateDirectory(directory);
+  const release=acquireMaintenanceGate(directory,'runtime');
+  try{
+    const runtime=await openRuntime(directory);
+    let closing:Promise<void>|undefined;
+    return {...runtime,close:()=>closing??=runtime.close().finally(release)};
+  }catch(error){release();throw error;}
+}
+
+async function openRuntime(directory:string) {
   const lockPath = join(directory, 'runtime.lock');
   const instance = randomBytes(16).toString('hex');
   try { writeFileSync(lockPath, JSON.stringify({ pid: process.pid, instance }), { flag: 'wx', mode: 0o600 }); }
