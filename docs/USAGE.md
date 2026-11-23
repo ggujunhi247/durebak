@@ -306,6 +306,12 @@ revision이 있는 작업의 결과 `request_message`에는 최신 hash와 작�
 
 `request_evidence {id,revisionId,procedure,result,attempt,key,startedAt,endedAt,supersedes?}`는 정확한 revision에 대한 **self_reported** 통과/실패 보고입니다. 시간은 밀리초 단위이고 종료는 시작 이후·현재 이전이어야 합니다. `attempt`는 작성자별 요청 안에서 고유합니다. 동일 작성자의 동일 revision 보고만 새 attempt로 supersede할 수 있고 전체 이력을 보존합니다. 다른 참여자의 실패 보고를 지울 수 없습니다. 요청당 최대100개입니다. 완료된 결과에도 근거를 추가할 수 있지만 취소·만료 후 새 보고는 거부합니다.
 
+`request_review {id,revisionId,decision,note?,key}`로 요청 생성자가 상대 작업자가 제출하고 자신에게 전달된 최신 결과물 버전에 판정을 남깁니다. 판정은 `approved`, `changes_requested`, `needs_review` 중 하나입니다. 새 결과물 버전에는 새 판정이 필요합니다. 검토 후 수정이 필요할 수 있는 경우에는 결과물 버전을 먼저 제출하고, 최종 결과 전송은 검토 후에 진행합니다.
+
+`request_deployment {id,revisionId,commitSha,artifactSha,outcome,evidenceUrl,key}`로 요청 생성자가 현재 승인된 결과물 버전의 배포를 보고합니다. `artifactSha`는 배포 파일의 SHA-256이며 두레박에 제출한 결과 텍스트의 해시와는 별도입니다. `outcome`은 `published` 또는 `failed`입니다. 두레박은 URL을 열거나 작업을 실행하지 않습니다. 같은 키로 동일한 요청을 다시 보내면 기존 기록을 반환합니다.
+
+`request_review_status {id}`에서 현재 검토 판정, 최신 배포 보고와 최근 기록을 읽습니다. 더 오래된 기록은 `request_review_history {id,reviewAfter?,deploymentAfter?,limit?}`에서 각각의 다음 커서로 읽습니다. `durebak dashboard`는 참여 요청의 실행 관측, 테스트 보고, 리뷰 판정, 배포 보고를 각각 표시합니다. 실행 관측의 출처는 현재 실험용 모의 실행 원장이며, `reported_published`의 출처는 참여자의 보고입니다. 리뷰 승인과 배포 보고는 사용자 권한을 부여하거나 병합·게시를 실행하지 않습니다.
+
 `request_verification {id}`는 `unverified`, `reported_pass`, `failed`, `needs_revalidation`, `waiting_delivery`를 반환합니다. 최신 revision의 활성 실패가 하나라도 있으면 실패이며 통과와 공존하면 conflict입니다. 이전 revision 보고만 있으면 재검증이 필요합니다. 이것은 두레박이 명령을 실행했다는 증명이 아닙니다. `request_evidence_list`는 본문 없는 metadata 페이지, `request_evidence_read`는 procedure 원문 범위 조회입니다.
 
 `request_bundle {id}`는 목표·기준 미리보기, 정확한 기준 digest, 전달된 최신 revision, 검증 상태와 필요한 원문 참조를 모델 호출 없이 묶습니다. `source_complete:false`이므로 작업 전에 required_sources를 모두 읽어야 합니다. 승인·ACK·수락·호스트 wake를 하지 않습니다. alpha.5 소스 기능이며 배포된 alpha.4에는 소급 적용되지 않습니다.

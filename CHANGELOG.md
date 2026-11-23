@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.27 — 2026-11-23
+
+- Record independent review decisions for delivered result revisions and preserve prior decisions when an artifact changes.
+- Record participant-reported deployment evidence with the approved revision, source commit and package digest.
+- Show execution observations, verification, review and deployment reports separately in the CLI dashboard.
+
 ## 0.1.0-alpha.26 — 2026-11-23
 
 - Add a per-directory maintenance lock shared by the daemon and MCP bridge, and defer maintenance while managed work has an unresolved execution record.
