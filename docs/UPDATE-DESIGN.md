@@ -1,6 +1,6 @@
 # 새 버전 알림·자동 적용 설계 (제안)
 
-상태: 자동 적용까지 포함한 승인 설계. alpha.24 소스에는 조회·private 정책·notify worker·macOS/Linux 사용자 예약·Ed25519 검증기를 구현했다. 현재 개발 소스에는 데이터 디렉터리별 데몬·MCP 차단 관문도 있다. 설치 전체의 관문, 자동 설치·rollback, 독립 복구 worker, 운영 서명 키와 채널이 준비될 때까지 `auto`와 `apply`는 차단한다. 현재 가능한 설치·수동 업데이트·GitHub 릴리스 구독은 [설치 안내](INSTALLATION.md)를 따른다. Windows 제품 지원은 기존 저장 보안·설치 실검증 관문 이후에만 활성화한다.
+상태: alpha.28은 사용자 소유 Linux/macOS npm 전역 설치에서 설정형 자동 적용을 제공한다. 서명 확인, 설치 경로·작업 상태 검사, staging 및 독립 복구를 거친다. Windows 적용은 별도 저장 및 설치 관문이 필요하다.
 
 ## 목표와 접근 선택
 
@@ -21,7 +21,7 @@
 | `durebak update pin VERSION` / `unpin` | 버전 고정/해제; 고정 중 자동 적용 없음 |
 | `durebak update apply --version VERSION` | 검증된 후보를 지정하여 동일한 안전 관문으로 적용; unsafe 강제 적용 옵션 없음 |
 
-현재 동작하는 명령은 check/status, enable notify, disable, pin/unpin, 예약용 worker다. 설치 소유자는 unverified로 표시하며 설치 명령을 임의 생성하지 않는다. auto/apply는 설치를 시작하지 않고 오류와 status의 차단 이유로 안내한다. 알림 backend의 검증 근거와 사용법은 [설치 안내](INSTALLATION.md#제품-내-업데이트-확인알림-alpha24부터)를 따른다. 운영 신뢰 키는 비어 있으며 verifier의 fixture key를 제품 키로 사용하지 않는다. 아래 자동 적용 계약은 남은 구현 요구사항이다.
+check/status, enable notify/auto, disable, pin/unpin, worker 및 apply를 제공한다. auto와 apply는 지원 설치와 정책 상태를 확인한다. 사용법과 수동 bootstrap은 [설치 안내](INSTALLATION.md)를 따른다.
 
 `notify`는 검사와 알림만, `auto`는 안전 시점에 적용한다. 기본은 disabled이며 모드·채널은 사용자가 명시한다. 자동 검사 주기는 1시간, 부하 분산 jitter는 최대10분이다. 로그인 시 예약 worker가 대기 상태를 다시 확인한다. timeout 또는 일시적 실패의 같은 실행 내 재시도는 최대2회이며 이후 다음 예약으로 넘긴다. 수동 check는 즉시 조회한다. 사용자 버전 고정과 중지 설정을 긴급 수정이라는 이유로 무시하지 않는다.
 
@@ -92,6 +92,10 @@ GitHub 릴리스 구독은 현재 즉시 쓸 수 있는 발견 경로다. 자동
 
 macOS는 임시 사용자 예약의 실제 등록→RunAtLoad worker 조회→제거를 확인했다. Linux는 CI의 실제 user manager에서 등록→service 실행→결과 저장→제거를 검증한다. 예약 파일/인자 단위 테스트만으로 Windows나 다른 OS 실지원이라고 주장하지 않는다. Windows CI는 읽기 전용 조회·서명 검증·CLI guard만 검증한다.
 
-개발 소스에서 데몬과 MCP 브리지는 데이터 디렉터리의 `maintenance.lock.sqlite`에 공유 잠금을 보유한다. 해당 파일을 사용하는 독점 관문은 활성 데몬이나 브리지가 있으면 거절한다. 독점 관문을 보유하는 동안 새 데몬과 브리지는 시작 전에 중단된다. 관문 파일이 없는 디렉터리와 이전 `runtime.lock`이 남은 디렉터리는 적용 대상으로 확정하지 않는다. 독점 관문은 런타임 DB를 읽기 전용으로 열고 현재 스키마와 관리 실행 원장을 확인한다. 미확정 실행이나 활성 할당이 남아 있으면 적용을 보류한다. 설치 전체의 데이터 디렉터리 수집은 후속 관문이다.
+개발 소스에서 데몬과 MCP 브리지는 데이터 디렉터리의 `maintenance.lock.sqlite`에 공유 잠금을 보유한다. 사용자 홈의 소유 npm 전역 설치에서는 패키지 밖에 설치 단위 공유 잠금과 실제 사용한 데이터 경로를 기록한다. 설치 준비는 설치 단위 독점 잠금을 먼저 얻고, 기록과 명시적으로 확인한 경로 전체를 중복 없이 잠근다. 하나라도 실패하면 먼저 얻은 잠금을 모두 해제한다. 관문 파일이 없거나 이전 `runtime.lock`이 남은 경로는 적용 대상으로 확정하지 않는다. 독점 관문은 읽기 전용으로 스키마와 실행 원장을 확인하며 미확정 실행, 활성 할당, 아직 수락 상태인 협업 요청이 있으면 보류한다. 이전 버전이 사용한 경로는 수동 bootstrap에서 확인해야 한다.
 
-자동 적용 완료 조건은 아직 충족하지 않았다. 다음 구현 순서는 (1) 서명 운영/회전 ADR와 CI signed-channel 발행, (2) 모든 DB/credential 접근의 maintenance fence 및 확인된 data-dir ledger 점검, (3) 설치 소유자별 artifact staging·독립 복구 transaction·실제 N-1 업그레이드/전원 중단 회귀, (4) Windows 저장/설치 ADR·WinGet 등록·PowerShell/Task Scheduler 실검증이다. 이 관문 없이 auto를 켜거나 `applied`라고 표시하지 않는다.
+패키지 교체 코드는 같은 파일시스템에 준비한 후보에 대해 활성 폴더 밖의 SQLite journal에 교체 전후 디렉터리의 파일 식별자를 먼저 기록한다. 교체 조정 코드는 패키지 밖의 복구 파일이 실행되는지 확인하고 전용 launchd/systemd 예약을 등록한 뒤에만 교체한다. 일반 업데이트 확인을 끄는 동작은 복구 예약과 구분한다. 미완료 교체가 있으면 해당 npm 설치의 새 데몬·MCP 시작을 보류한다. 검증을 통과하기 전 프로세스가 종료되면 별도 프로세스에서 이전 폴더를 복구할 수 있고, 식별자가 다른 폴더는 보존한다. 격리된 npm 전역 설치, 예약 등록 실패, 강제 종료와 복구를 시험한다. alpha.28의 Linux/macOS 사용자 소유 npm 설치 worker는 운영 서명 확인 후 후보를 staging한다. 모의 예약 등록과 격리된 npm 전환 시험은 실제 사용자의 예약 실행 및 차기 공개 버전 적용과 구분한다.
+
+릴리스 서명 도구는 macOS/Linux x64·arm64별 envelope에 패키지 크기, SHA-256, 호환 스키마와 프로토콜을 기록한다. 다운로드 검증은 서명과 GitHub 파일의 크기·해시를 검사하고 같은 버전의 npm SHA-512와 대조한다. npm 전역 설치 검사에서는 현재 사용자 홈 아래에서 npm 패키지와 실행 링크가 같은 CLI를 가리키는지 확인하고 PATH가 모호하면 거부한다. 이 구성은 테스트 키와 격리된 설치 경로로 검증하며 예약 worker에 연결하기 전이다.
+
+alpha.28은 최초 수동 bootstrap 버전이다. 공개된 이후 버전을 적용하는 실제 N-1→N 검증과 운영 서명 키 회전, Windows 저장 및 설치 지원은 별도 단계다.

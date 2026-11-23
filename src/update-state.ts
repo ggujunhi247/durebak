@@ -12,7 +12,7 @@ const source=z.object({status:z.enum(['update_available','up_to_date','installed
  return s.release_url===`https://github.com/ggujunhi247/durebak/releases/tag/v${s.version}`&&(s.install_command===null||s.install_command===`npm install --global durebak@${s.version} --registry=https://registry.npmjs.org`);
 });
 const reportSchema=z.object({current:releaseVersion,channel,automatic_apply:z.literal(false),installation_owner:z.literal('unverified'),installation_guide_url:z.literal('https://github.com/ggujunhi247/durebak/blob/main/docs/INSTALLATION.md'),npm:source,github:source}).strict();
-const stateSchema=z.object({schema:z.literal(1),revision:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),mode:z.enum(['disabled','notify']),channel,pin:releaseVersion.nullable(),last_checked_at:z.number().int().nonnegative().nullable(),next_check_at:z.number().int().nonnegative().nullable(),report:reportSchema.nullable(),last_notice:z.string().regex(/^[a-f0-9]{64}$/).nullable(),scheduler:z.enum(['none','launchd','systemd']),scheduler_digest:z.string().regex(/^[a-f0-9]{64}$/).nullable(),last_shown_notice:z.string().regex(/^[a-f0-9]{64}$/).nullable()}).strict();
+const stateSchema=z.object({schema:z.literal(1),revision:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),mode:z.enum(['disabled','notify','auto']),channel,pin:releaseVersion.nullable(),last_checked_at:z.number().int().nonnegative().nullable(),next_check_at:z.number().int().nonnegative().nullable(),report:reportSchema.nullable(),last_notice:z.string().regex(/^[a-f0-9]{64}$/).nullable(),scheduler:z.enum(['none','launchd','systemd']),scheduler_digest:z.string().regex(/^[a-f0-9]{64}$/).nullable(),last_shown_notice:z.string().regex(/^[a-f0-9]{64}$/).nullable(),auto_path:z.string().min(1).max(8192).optional(),last_apply:z.object({version:releaseVersion,phase:z.enum(['blocked','applied']),reason:z.string().regex(/^[a-z_]{1,80}$/).nullable()}).strict().optional()}).strict();
 export type UpdateState=z.infer<typeof stateSchema>;
 export function defaultUpdateState(current:string):UpdateState{return {schema:1,revision:0,mode:'disabled',channel:channelForVersion(current),pin:null,last_checked_at:null,next_check_at:null,report:null,last_notice:null,scheduler:'none',scheduler_digest:null,last_shown_notice:null};}
 function missing(error:unknown){return (error as NodeJS.ErrnoException).code==='ENOENT';}
@@ -54,18 +54,18 @@ export function changeUpdateState(directory:string,current:string,change:(state:
 }
 export async function runUpdateWorker(directory:string,current:string,request?:UpdateRequest,now=Date.now()):Promise<{checked:boolean;notice:boolean;report?:UpdateReport;reason?:string}>{
  const initial=loadUpdateState(directory,current);
- if(initial.mode!=='notify'||(initial.next_check_at!==null&&initial.next_check_at>now))return {checked:false,notice:false};
+ if(initial.mode==='disabled'||(initial.next_check_at!==null&&initial.next_check_at>now))return {checked:false,notice:false};
  if(initial.last_checked_at!==null&&now<initial.last_checked_at)return {checked:false,notice:false,reason:'clock_reversed'};
  const unlock=lock(directory,'worker.lock');
  try{
   const before=loadUpdateState(directory,current);
-  if(before.mode!=='notify'||before.revision!==initial.revision)return {checked:false,notice:false};
+  if(before.mode==='disabled'||before.revision!==initial.revision)return {checked:false,notice:false};
   const report=await checkUpdates({current,channel:before.channel,...(before.pin===null?{}:{pin:before.pin})},request);
   const fingerprint=createHash('sha256').update(JSON.stringify([report.channel,report.npm.status,report.npm.version,report.github.status,report.github.version])).digest('hex');
   let notice=false,committed=false;
   changeUpdateState(directory,current,state=>{
-   if(state.revision!==before.revision||state.mode!=='notify')return state;
-   notice=[report.npm.status,report.github.status].includes('update_available')&&fingerprint!==state.last_notice;committed=true;
+   if(state.revision!==before.revision||state.mode==='disabled')return state;
+   notice=state.mode==='notify'&&[report.npm.status,report.github.status].includes('update_available')&&fingerprint!==state.last_notice;committed=true;
    return {...state,report,last_checked_at:now,next_check_at:now+3600000,last_notice:notice?fingerprint:state.last_notice};
   });
   return committed?{checked:true,notice,report}:{checked:false,notice:false,reason:'policy_changed'};

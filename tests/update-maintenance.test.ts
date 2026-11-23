@@ -6,8 +6,9 @@ import {join,resolve} from 'node:path';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 import {adminCall} from '../src/client.js';
-import {acquireMaintenanceGate,openDatabase} from '../src/database.js';
+import {acquireKnownMaintenance,acquireMaintenanceGate,openDatabase} from '../src/database.js';
 import {startRuntime} from '../src/runtime.js';
+import {Store} from '../src/store.js';
 
 function fixture(t:test.TestContext){
  const root=mkdtempSync(join(tmpdir(),'durebak-maintenance-'));
@@ -57,6 +58,32 @@ test('maintenance refuses unresolved managed work after the daemon exits',t=>{
  try{resolved.exec("UPDATE work_attempts SET state='completed',active_released=1");}
  finally{resolved.close();}
  acquireMaintenanceGate(dir,'maintenance')();
+});
+
+test('one outstanding accepted request blocks all known directories and releases earlier locks',t=>{
+ const root=fixture(t),first=join(root,'a'),busy=join(root,'z');
+ acquireMaintenanceGate(first,'runtime')();
+ acquireMaintenanceGate(busy,'runtime')();
+ let now=100000;
+ const store=new Store(busy,{now:()=>now});
+ let id:string;
+ try{
+  const creator=store.register('workspace','creator','codex').session;
+  const recipient=store.register('workspace','recipient','claude').session;
+  id=store.requestCreate(creator,{to:recipient.id,body:'ongoing',key:'request'}).id;
+  now+=5000;
+  store.receive(recipient);
+  store.requestTransition(recipient,id,1,'accepted');
+ }finally{store.close();}
+ assert.throws(()=>acquireKnownMaintenance([busy,first]),/update_request_unresolved/);
+ acquireMaintenanceGate(first,'runtime')();
+ const resolved=openDatabase(busy);
+ try{resolved.prepare("UPDATE requests SET state='cancelled' WHERE id=?").run(id);}
+ finally{resolved.close();}
+ const release=acquireKnownMaintenance([busy,first,first]);
+ try{
+  for(const path of [first,busy])assert.throws(()=>acquireMaintenanceGate(path,'runtime'),/maintenance_in_progress/);
+ }finally{release();}
 });
 
 test('an open MCP bridge keeps the maintenance gate closed after its daemon exits',async t=>{

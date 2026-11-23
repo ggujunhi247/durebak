@@ -34,7 +34,7 @@ test('verified GitHub delivery proceeds independently of npm publisher authentic
  const workflow=readFileSync('.github/workflows/release.yml','utf8');
  const job=workflow.split('  github-release:')[1];
  assert.ok(job,'missing independent GitHub release job');
- assert.match(job,/needs: \[artifact, smoke\]/);
+ assert.match(job,/needs: \[artifact, smoke, sign-update\]/);
  assert.doesNotMatch(job,/needs:.*publish|environment: npm|id-token: write|npm publish/);
  assert.match(job,/sha256sum --check SHA256SUMS/);
  assert.ok(job.includes('cmp "$asset" "$RUNNER_TEMP/existing-assets/$name"'));

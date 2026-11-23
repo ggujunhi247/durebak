@@ -1,5 +1,7 @@
 # Release runbook
 
+Starting with alpha.28, publish annotated release tags. The protected npm environment supplies the Ed25519 signing secret to the signing step. The job validates the package digest and generates four platform envelopes valid for seven days from tag creation. GitHub publication consumes the envelopes, and npm publication uses its separate OIDC authorization. To rotate a key, first release a manually installable updater that trusts the new public key, then replace the signing secret. Clients without a currently trusted key must update manually.
+
 The source repository is `ggujunhi247/durebak`. [durebak@0.1.0-alpha.2](https://www.npmjs.com/package/durebak/v/0.1.0-alpha.2) is the first public npm release. It was bootstrapped with account 2FA from the verified tarball in the [GitHub prerelease](https://github.com/ggujunhi247/durebak/releases/tag/v0.1.0-alpha.2); that manual publication has no OIDC provenance. Configure the npm trusted publisher before the next automated release.
 
 ## One-time setup
