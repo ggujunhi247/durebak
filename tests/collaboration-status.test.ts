@@ -20,6 +20,30 @@ test('terminal dashboard safely renders malicious aliases and does not turn peer
 test('terminal dashboard escapes DEL and C1 control sequences',t=>{
  const {store,a}=fixture(t);store.register('w','evil\u009b2J\u009d0;spoofed\u009c\u007f','other');const text=renderCollaborationStatus(store.collaborationStatus(a,'epoch'));assert.ok(!/[\u007f-\u009f]/.test(text));assert.ok(text.includes('\\u009b'));
 });
+test('terminal dashboard shows distinct evidence stages without rendering request bodies or malformed stage text',t=>{
+ const {store,a,b}=fixture(t);
+ store.requestCreate(a,{to:b.id,body:'private question',key:'q'});
+ const view=store.collaborationStatus(a,'epoch');
+ const row=view.requests.items[0]!;
+ Object.assign(row,{execution:'unknown',verification:'needs_revalidation',review:'needs_review',deployment:'not_reported'});
+ const rendered=renderCollaborationStatus(view);
+ assert.match(rendered,/execution=unknown \| verification=needs_revalidation \| review=needs_review \| deployment=not_reported/);
+ assert.match(rendered,/Execution shows the mock managed ledger\. Verification evidence is self_reported\. Deployment is participant-reported\./);
+ assert.ok(!rendered.includes('private question'));
+ row.review='approved\x1b[2J\n\u202efake receipt';
+ row.deployment='reported_published\n';
+ const malformed=renderCollaborationStatus(view);
+ assert.match(malformed,/review=unknown \| deployment=unknown \| deadline=/);
+ assert.doesNotMatch(malformed,/[\x1b\u202e]|fake receipt/);
+
+ delete row.execution;
+ delete row.review;
+ delete row.deployment;
+ const legacy=renderCollaborationStatus(view);
+ assert.match(legacy,/ \| verification=needs_revalidation \| deadline=/);
+ assert.match(legacy,/Host readiness\/progress: unknown\. Evidence is self_reported\. Snapshot does not receive, acknowledge or execute\./);
+ assert.doesNotMatch(legacy,/execution=|review=|deployment=/);
+});
 test('one observation boundary keeps snapshot states consistent with its maintenance',async t=>{
  const {DatabaseSync}=await import('node:sqlite');const dir=mkdtempSync(join(tmpdir(),'durebak-status-time-'));let now=100000,advancing=false;const store=new Store(dir,{now:()=>advancing?now++:now});t.after(()=>{store.close();rmSync(dir,{recursive:true,force:true});});const a=store.register('w','a','codex').session,b=store.register('w','b','claude').session,q=store.requestCreate(a,{to:b.id,body:'q',key:'q',deadlineMs:10000,task:{title:'task',criteria:'test'}});now=q.deadline_at-1;advancing=true;const view=store.collaborationStatus(a,'epoch'),row=view.requests.items[0]!;const db=new DatabaseSync(join(dir,'runtime.sqlite'));try{const persisted=db.prepare('SELECT state,version FROM requests WHERE id=?').get(q.id)!;assert.equal(row.state,persisted.state);assert.equal(row.version,persisted.version);assert.equal(row.state,view.observed_at>=q.deadline_at?'timed_out':'pending');}finally{db.close();}
 });

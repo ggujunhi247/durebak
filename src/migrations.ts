@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { fail } from './domain.js';
 import { transaction } from './transactions.js';
 
-export const schemaVersion = 13;
+export const schemaVersion = 14;
 
 // Preserve released migration SQL and append new versions at the end.
 export function migrate(db: DatabaseSync) {
@@ -261,6 +261,29 @@ export function migrate(db: DatabaseSync) {
             claim_attempt TEXT UNIQUE REFERENCES work_attempts(id)
           ) STRICT;
           PRAGMA user_version=13;
+        `);
+      }
+      if ((db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version < 14) {
+        db.exec(`
+          CREATE TABLE revision_reviews (
+            cursor INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
+            request_id TEXT NOT NULL REFERENCES requests(id), revision_id TEXT NOT NULL REFERENCES task_revisions(id),
+            author TEXT NOT NULL REFERENCES sessions(id), key TEXT NOT NULL, digest TEXT NOT NULL,
+            decision TEXT NOT NULL CHECK(decision IN ('approved','changes_requested','needs_review')),
+            note TEXT, created_ms INTEGER NOT NULL, UNIQUE(request_id,author,key)
+          ) STRICT;
+          CREATE INDEX revision_reviews_request ON revision_reviews(request_id,cursor);
+          CREATE TABLE deployment_evidence (
+            cursor INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
+            request_id TEXT NOT NULL REFERENCES requests(id), revision_id TEXT NOT NULL REFERENCES task_revisions(id),
+            review_id TEXT NOT NULL REFERENCES revision_reviews(id), author TEXT NOT NULL REFERENCES sessions(id),
+            key TEXT NOT NULL, digest TEXT NOT NULL, commit_sha TEXT NOT NULL, artifact_sha TEXT NOT NULL,
+            outcome TEXT NOT NULL CHECK(outcome IN ('published','failed')),
+            evidence_url TEXT NOT NULL, created_ms INTEGER NOT NULL, UNIQUE(request_id,author,key)
+          ) STRICT;
+          CREATE INDEX deployment_evidence_request ON deployment_evidence(request_id,cursor);
+          CREATE INDEX work_attempts_request_state ON work_attempts(request_id,state);
+          PRAGMA user_version=14;
         `);
       }
     });
