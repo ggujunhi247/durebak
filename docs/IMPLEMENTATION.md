@@ -33,6 +33,8 @@
 
 현재 task version은 작업 상태 revision이다. artifact hash는 내용 revision이며 자동 review gate와는 별개다. 세션 ID는 두레박 등록 ID이고 호스트 native session ID와 매핑하지 않는다. 세션별 MCP 설정을 유지할 수 없는 호스트에서는 동일 identity 공유를 방지하는 별도 연결 방식이 필요하다.
 
+결과물 독립 리뷰는 요청 생성자가 상대 작업자의 전달된 최신 revision에 기록하는 판정이다. 배포 보고는 승인된 revision과 commit SHA, 배포 파일 SHA-256, 근거 URL을 묶는다. 요청 참가자가 현재 상태와 최근 이력을 조회할 수 있고 CLI 대시보드는 실행 관측, 자기보고 검증, 리뷰, 배포 보고를 표시한다. 외부 URL과 배포 결과의 진위는 호출자가 확인한다.
+
 ## 검증 범위
 
 자동 테스트는 SQLite 저장·복구, 권한과 workspace 경계, 작업 경쟁, 큐 정책, HTTP·MCP 통신 및 기록 내보내기를 확인합니다. Linux·macOS CI에서 타입 검사, 테스트와 패키지 설치 검증을 실행합니다. 최신 결과는 [GitHub Actions](https://github.com/ggujunhi247/durebak/actions)를 확인하세요.
