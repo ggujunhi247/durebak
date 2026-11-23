@@ -20,13 +20,58 @@ npm run lab:matrix -- --worker codex --reviewer agy
 
 ### Antigravity 리뷰어 시험
 
-로그인된 전용 agy 홈으로 Codex → agy → Codex를 명시적으로 실행합니다. 홈은 현재 OS 사용자가 소유한 0700 디렉터리여야 합니다. 그 홈의 `.gemini/antigravity-cli`에는 인증 상태를 두고, 테스트가 사용할 `settings.json`과 MCP 구성은 비워 둡니다. 전용 홈에 다른 MCP나 플러그인 설정이 있으면 시험이 중단됩니다.
+Linux 또는 macOS에서 로그인된 Codex CLI와 agy를 사용합니다. 아래 명령은 저장소에서 실행합니다.
 
-```sh
-npm run lab:matrix -- --live --worker codex --reviewer agy --agy-home /absolute/private/agy-test-home
-```
+1. **전용 홈 만들기.** 같은 셸에서 `agy_home`을 이후 단계에도 사용합니다. 로그인용 작업 디렉터리와 XDG 경로는 검증 대상 홈의 바깥에 둡니다.
 
-시험 동안 리뷰어에게 `receive`, `ack`, `send`만 허용하며 완료 후 시험용 설정 파일을 제거합니다. 홈을 지정하지 않거나 agy를 요청 발신자로 고르면 `configuration_unverified`로 중단합니다. 일반 매트릭스의 여섯 조합은 그대로 실행됩니다.
+   ```sh
+   agy_trial=$(mktemp -d "${TMPDIR:-/tmp}/durebak-agy.XXXXXXXX")
+   agy_trial=$(cd "$agy_trial" && pwd -P)
+   agy_home="$agy_trial/home"
+   mkdir -m 700 "$agy_home" "$agy_home/.gemini" "$agy_home/.gemini/antigravity-cli"
+   mkdir -m 700 "$agy_trial/work" "$agy_trial/config" "$agy_trial/cache" "$agy_trial/data" "$agy_trial/state"
+   ```
+
+2. **전용 홈에서 로그인.** 아래 서브셸에서 agy를 띄웁니다. 로그인 화면이 나오면 공식 인증 절차를 마치고 agy를 종료합니다. 운영체제 키링에 로그인 상태가 있으면 인증 화면 없이 열릴 수 있습니다. [Antigravity CLI 인증](https://antigravity.google/docs/install?tab=cli)
+
+   ```sh
+   (
+     cd "$agy_trial/work"
+     HOME="$agy_home" \
+       XDG_CONFIG_HOME="$agy_trial/config" XDG_CACHE_HOME="$agy_trial/cache" \
+       XDG_DATA_HOME="$agy_trial/data" XDG_STATE_HOME="$agy_trial/state" \
+       AGY_CLI_DISABLE_AUTO_UPDATE=true agy
+   )
+   ```
+
+3. **모델 호출 전 설정 충돌 확인.** 로그인 과정에서 전용 홈에 `settings.json`이 생성됐다면 아래처럼 홈 바깥에 보관합니다. 이 경로는 시험 도구가 실행 중에 사용합니다. 별도의 MCP·플러그인·훅 설정을 가져온 경우 새 전용 홈으로 시작합니다.
+
+   ```sh
+   if [ -f "$agy_home/.gemini/antigravity-cli/settings.json" ]; then
+     mv -i "$agy_home/.gemini/antigravity-cli/settings.json" "$agy_trial/login-settings.json"
+   fi
+   npm run build
+   node --input-type=module - "$agy_home" <<'JS'
+   import { validateAgyHome } from './scripts/lib/host-adapters/antigravity-cli.mjs';
+   try {
+     validateAgyHome(process.argv[2]);
+     console.log('agy profile configuration ready');
+   } catch (error) {
+     console.error(error.message);
+     process.exitCode = 1;
+   }
+   JS
+   ```
+
+   `configuration_unverified`이면 경로가 실제 디렉터리인지, 홈과 `.gemini` 및 `.gemini/antigravity-cli`의 소유자가 현재 사용자인지, 모드가 `0700`인지 확인합니다. `.gemini/config`는 없거나 비어 있어야 합니다. 이 검사는 로그인 여부나 모델 연결을 확인하지 않습니다.
+
+4. **왕복 실행.** 위 검사가 통과하면 아래 명령으로 Codex → agy → Codex를 실행합니다. 모델 사용량이 발생합니다.
+
+   ```sh
+   npm run lab:matrix -- --live --worker codex --reviewer agy --agy-home "$agy_home"
+   ```
+
+성공하면 해당 조합이 `passed`이고 저장소 검사 11개가 모두 통과합니다. 시험 동안 agy에게 `receive`, `ack`, `send`만 허용하며 종료 후 시험용 설정 파일을 제거합니다. 전용 홈은 동시에 다른 agy 실행에 쓰지 않습니다. 일반 매트릭스는 기존 여섯 조합을 검사합니다.
 
 보고서를 보존하려면:
 
