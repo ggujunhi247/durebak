@@ -131,6 +131,42 @@ jobs:
       - run: |
           (cd release && shasum -a 256 --check SHA256SUMS)
           node scripts/smoke-package.mjs --tarball "$(find release -name '*.tgz')"
+  sign-update:
+    if: inputs.publish
+    needs: [artifact, smoke]
+    environment: npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.artifact.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release
+          path: release
+      - run: npm ci --ignore-scripts && npm run build
+      - name: Sign the verified update artifact
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          DUREBAK_UPDATE_SIGNING_KEY: ${{ secrets.DUREBAK_UPDATE_SIGNING_KEY }}
+        run: |
+          (cd release && sha256sum --check SHA256SUMS)
+          issued="$(git for-each-ref --format='%(taggerdate:unix)' "refs/tags/$RELEASE_TAG")"
+          test -n "$issued"
+          mkdir signed-update
+          node scripts/sign-update-release.mjs --tarball "$(find release -name '*.tgz')" --output signed-update --min-updater 0.1.0-alpha.27 --issued-at "${issued}000"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: signed-update
+          path: signed-update/*.json
+          if-no-files-found: error
   publish:
     if: inputs.publish
     needs: [artifact, smoke]
@@ -167,7 +203,7 @@ jobs:
           node scripts/smoke-package.mjs --tarball "$(find release -name '*.tgz')"
   github-release:
     if: inputs.publish
-    needs: [artifact, smoke]
+    needs: [artifact, smoke, sign-update]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -183,6 +219,10 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release
+          path: release
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: signed-update
           path: release
       - name: Revalidate identical GitHub artifact
         env:

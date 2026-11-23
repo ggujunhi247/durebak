@@ -1,24 +1,37 @@
 import {spawnSync} from 'node:child_process';
 import {mkdirSync,lstatSync,readFileSync,writeFileSync,unlinkSync,type Stats} from 'node:fs';
-import {join,resolve,isAbsolute} from 'node:path';
+import {join,resolve,isAbsolute,relative,sep} from 'node:path';
 import {createHash} from 'node:crypto';
 import {fail} from './domain.js';
-export interface ScheduleOptions {home:string;platform:string;directory:string;node:string;cli:string;uid:number}
+export interface ScheduleOptions {home:string;platform:string;directory:string;node:string;cli:string;uid:number;recoveryRoot?:string}
 export interface ScheduleReceipt {kind:'launchd'|'systemd';digest:string}
 export type ScheduleRunner=(command:string,args:string[])=>number;
 const runner:ScheduleRunner=(command,args)=>{const result=spawnSync(command,args,{stdio:'ignore',timeout:10000,env:{PATH:'/usr/bin:/bin',HOME:process.env.HOME??'',XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR??'',DBUS_SESSION_BUS_ADDRESS:process.env.DBUS_SESSION_BUS_ADDRESS??''}});return result.status??-1;};
-function id(options:ScheduleOptions){return 'com.durebak.updates.'+createHash('sha256').update(resolve(options.directory)).digest('hex').slice(0,20);}
+function id(options:ScheduleOptions){
+ const kind=options.recoveryRoot?'recovery':'updates';
+ return 'com.durebak.'+kind+'.'+createHash('sha256').update(resolve(options.recoveryRoot??options.directory)).digest('hex').slice(0,20);
+}
 function validate(options:ScheduleOptions){
  if(!['darwin','linux'].includes(options.platform)||options.uid===0||!Number.isSafeInteger(options.uid)||options.uid<0)fail('unsupported_update_scheduler');
  for(const value of [options.home,options.directory,options.node,options.cli])if(!isAbsolute(value)||/[\x00-\x1f\x7f]/.test(value))fail('unsafe_update_schedule_path');
+ if(options.recoveryRoot!==undefined){
+  if(!isAbsolute(options.recoveryRoot)||/[\x00-\x1f\x7f]/.test(options.recoveryRoot))fail('unsafe_update_schedule_path');
+  for(const file of [options.node,options.cli]){
+   const path=relative(join(options.recoveryRoot,'durebak'),file);
+   if(!isAbsolute(path)&&path.split(sep)[0]!=='..')fail('unsafe_update_schedule_path');
+  }
+ }
 }
 const xml=(value:string)=>value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;');
 const unitArg=(value:string)=>'"'+value.replaceAll('\\','\\\\').replaceAll('"','\\"').replaceAll('%','%%').replaceAll('$',()=> '$$')+'"';
 export function scheduleFiles(options:ScheduleOptions):{path:string;text:string}[]{
- validate(options);const label=id(options);const args=[options.node,options.cli,'update','worker','--update-dir',resolve(options.directory)];
+ validate(options);const label=id(options);
+ const args=[options.node,options.cli,...(options.recoveryRoot?['--recover',options.recoveryRoot]:['update','worker','--update-dir',resolve(options.directory)])];
  if(options.platform==='darwin')return [{path:join(options.home,'Library','LaunchAgents',label+'.plist'),text:`<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array>${args.map(a=>'<string>'+xml(a)+'</string>').join('')}</array><key>RunAtLoad</key><true/><key>StartInterval</key><integer>60</integer><key>LimitLoadToSessionType</key><string>Aqua</string></dict></plist>\n`}];
  const base=join(options.home,'.config','systemd','user',label);
- return [{path:base+'.service',text:`[Unit]\nDescription=Durebak update notification check\n[Service]\nType=oneshot\nExecStart=${args.map(unitArg).join(' ')}\nTimeoutStartSec=30\n`},{path:base+'.timer',text:`[Unit]\nDescription=Durebak update notification timer\n[Timer]\nOnCalendar=*-*-* *:*:00\nPersistent=true\nUnit=${label}.service\n[Install]\nWantedBy=timers.target\n`}];
+ const description=options.recoveryRoot?'package recovery':'update notification';
+ const timing=options.recoveryRoot?'OnStartupSec=30s\nOnUnitInactiveSec=60s':'OnCalendar=*-*-* *:*:00\nPersistent=true';
+ return [{path:base+'.service',text:`[Unit]\nDescription=Durebak ${description}${options.recoveryRoot?'':' check'}\n[Service]\nType=oneshot\nExecStart=${args.map(unitArg).join(' ')}\nTimeoutStartSec=30\n`},{path:base+'.timer',text:`[Unit]\nDescription=Durebak ${description} timer\n[Timer]\n${timing}\nUnit=${label}.service\n[Install]\nWantedBy=timers.target\n`}];
 }
 function safe(stat:Stats,directory:boolean){if(stat.uid!==process.geteuid?.()||(stat.mode&0o022)!==0||stat.isSymbolicLink()||(directory?!stat.isDirectory():!stat.isFile()||stat.nlink!==1||(stat.mode&0o077)!==0||stat.size>16384))fail('unsafe_update_schedule');}
 function parent(options:ScheduleOptions){

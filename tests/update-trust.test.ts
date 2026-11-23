@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,sign} from 'node:crypto';
-import {verifyUpdateManifest,automaticUpdateBlockers} from '../src/update-trust.js';
+import {createHash,generateKeyPairSync,sign} from 'node:crypto';
+import {verifyUpdateManifest,automaticUpdateBlockers,trustedUpdateKeys} from '../src/update-trust.js';
 const now=1800000000000;
 const expected={current:'0.1.0-alpha.23',channel:'alpha' as const,platform:'linux',arch:'x64',schema:13,protocol:1,now};
 const payload={schema:1,package:'durebak',version:'0.1.0-alpha.24',channel:'alpha',platform:'linux',arch:'x64',min_updater:'0.1.0-alpha.23',database_schema:13,protocol:1,issued_at:now-1000,expires_at:now+60000,artifact:{url:'https://github.com/ggujunhi247/durebak/releases/download/v0.1.0-alpha.24/durebak-0.1.0-alpha.24.tgz',sha256:'a'.repeat(64),bytes:1000}};
@@ -16,7 +16,12 @@ test('tampered, unknown-key and expired manifests cannot authorize an update',()
   const changed=fixture({...payload,...changes});assert.throws(()=>verifyUpdateManifest(changed.envelope,changed.keys,expected));
  }
 });
-test('production automatic apply remains blocked without trust and maintenance/recovery proof',()=>{
- const blockers=automaticUpdateBlockers('linux');assert.ok(blockers.includes('release_trust_not_configured'));assert.ok(blockers.includes('maintenance_gate_unavailable'));assert.ok(blockers.includes('recovery_worker_unavailable'));
+test('product trust uses fingerprinted Ed25519 keys and disallows Windows automatic apply',()=>{
+ assert.ok(Object.keys(trustedUpdateKeys).length>0);
+ for(const [keyId,key] of Object.entries(trustedUpdateKeys)){
+  assert.equal(key.asymmetricKeyType,'ed25519');
+  assert.equal(keyId,createHash('sha256').update(key.export({format:'der',type:'spki'})).digest('hex'));
+ }
+ assert.throws(()=>verifyUpdateManifest(fixture().envelope,trustedUpdateKeys,expected),/unknown_update_key/);
  assert.ok(automaticUpdateBlockers('win32').includes('unsupported_storage_platform'));
 });
