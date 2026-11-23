@@ -1,6 +1,6 @@
 # 새 버전 알림·자동 적용 설계 (제안)
 
-상태: 자동 적용까지 포함한 승인 설계. alpha.24 소스에는 조회·private 정책·notify worker·macOS/Linux 사용자 예약·Ed25519 검증기를 구현했다. 기존 alpha.23 배포 파일에는 포함되지 않는다. 자동 설치·rollback·maintenance gate·독립 recovery worker·운영 서명 키/채널은 미구현이며 `auto`/`apply`는 차단한다. 현재 가능한 설치·수동 업데이트·GitHub 릴리스 구독은 [설치 안내](INSTALLATION.md)를 따른다. Windows 제품 지원은 기존 저장 보안·설치 실검증 관문 이후에만 활성화한다.
+상태: 자동 적용까지 포함한 승인 설계. alpha.24 소스에는 조회·private 정책·notify worker·macOS/Linux 사용자 예약·Ed25519 검증기를 구현했다. 현재 개발 소스에는 데이터 디렉터리별 데몬·MCP 차단 관문도 있다. 설치 전체의 관문, 자동 설치·rollback, 독립 복구 worker, 운영 서명 키와 채널이 준비될 때까지 `auto`와 `apply`는 차단한다. 현재 가능한 설치·수동 업데이트·GitHub 릴리스 구독은 [설치 안내](INSTALLATION.md)를 따른다. Windows 제품 지원은 기존 저장 보안·설치 실검증 관문 이후에만 활성화한다.
 
 ## 목표와 접근 선택
 
@@ -91,5 +91,7 @@ GitHub 릴리스 구독은 현재 즉시 쓸 수 있는 발견 경로다. 자동
 조회는 고정 npm/GitHub HTTPS 출처, 요청당 5초·256KiB, redirect 거부, GitHub 최대5페이지/50개로 제한한다. 실패를 최신이라고 표시하지 않는다. 현재 jitter는 0이며 같은 실행 내 재시도는 하지 않는다. 정책과 결과는 0700 root/0600 파일, 원자적 rename, SQLite OS coordination lock으로 보관한다. 프로세스 강제 종료 후 writer/worker 잠금 해제, 정책 변경 중 결과 폐기, 채널 변경/수동 업그레이드 뒤 알림 정합성을 회귀 검증한다. 운영 DB에는 접근하지 않는다.
 
 macOS는 임시 사용자 예약의 실제 등록→RunAtLoad worker 조회→제거를 확인했다. Linux는 CI의 실제 user manager에서 등록→service 실행→결과 저장→제거를 검증한다. 예약 파일/인자 단위 테스트만으로 Windows나 다른 OS 실지원이라고 주장하지 않는다. Windows CI는 읽기 전용 조회·서명 검증·CLI guard만 검증한다.
+
+개발 소스에서 데몬과 MCP 브리지는 데이터 디렉터리의 `maintenance.lock.sqlite`에 공유 잠금을 보유한다. 해당 파일을 사용하는 독점 관문은 활성 데몬이나 브리지가 있으면 거절한다. 독점 관문을 보유하는 동안 새 데몬과 브리지는 시작 전에 중단된다. 관문 파일이 없는 디렉터리와 이전 `runtime.lock`이 남은 디렉터리는 적용 대상으로 확정하지 않는다. 독점 관문은 런타임 DB를 읽기 전용으로 열고 현재 스키마와 관리 실행 원장을 확인한다. 미확정 실행이나 활성 할당이 남아 있으면 적용을 보류한다. 설치 전체의 데이터 디렉터리 수집은 후속 관문이다.
 
 자동 적용 완료 조건은 아직 충족하지 않았다. 다음 구현 순서는 (1) 서명 운영/회전 ADR와 CI signed-channel 발행, (2) 모든 DB/credential 접근의 maintenance fence 및 확인된 data-dir ledger 점검, (3) 설치 소유자별 artifact staging·독립 복구 transaction·실제 N-1 업그레이드/전원 중단 회귀, (4) Windows 저장/설치 ADR·WinGet 등록·PowerShell/Task Scheduler 실검증이다. 이 관문 없이 auto를 켜거나 `applied`라고 표시하지 않는다.

@@ -5,6 +5,7 @@ import { version } from './version.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { credential, request } from './client.js';
+import { acquireMaintenanceGate } from './database.js';
 import { DomainError } from './domain.js';
 import { operations, type Operation } from './runtime.js';
 
@@ -65,6 +66,12 @@ const descriptions: Record<PublicOperation,string> = {
 
 export async function serveMcp(file: string) {
   const identity = credential(file);
+  const release=acquireMaintenanceGate(identity.data_dir,'runtime');
+  try{return await openMcp(identity,release);}
+  catch(error){release();throw error;}
+}
+
+async function openMcp(identity:ReturnType<typeof credential>,release:()=>void) {
   const server = new McpServer({ name:'durebak', version }, { instructions });
   for (const operation of Object.keys(descriptions) as PublicOperation[]) {
     server.registerTool(`durebak_${operation}`, { description:descriptions[operation], inputSchema:operations[operation].shape }, async (args: Record<string, unknown>) => {
@@ -86,16 +93,16 @@ export async function serveMcp(file: string) {
     schedule:(fn,delay)=>{const timer=setTimeout(fn,delay);timer.unref();return timer;},
     cancel:handle=>clearTimeout(handle as ReturnType<typeof setTimeout>),
   });
-  let cleaned=false;
-  const cleanup=async()=>{
-    if(cleaned)return;cleaned=true;
+  let cleaning:Promise<void>|undefined;
+  const cleanup=()=>cleaning??=finishHeartbeat();
+  async function finishHeartbeat(){
     process.removeListener('SIGINT',stop);process.removeListener('SIGTERM',stop);
     process.stdin.removeListener('end',stop);process.stdin.removeListener('close',stop);
     await heartbeat.stop();
-  };
-  const stop=()=>{void cleanup().then(()=>server.close()).catch(()=>{process.exitCode=1;});};
+  }
+  const stop=()=>{void cleanup().finally(()=>server.close()).catch(()=>{process.exitCode=1;});};
   const onclose=server.server.onclose;
-  server.server.onclose=()=>{onclose?.();void cleanup();};
+  server.server.onclose=()=>{try{onclose?.();}finally{void cleanup().finally(release).catch(()=>{process.exitCode=1;});}};
   process.once('SIGINT',stop);process.once('SIGTERM',stop);
   process.stdin.once('end',stop);process.stdin.once('close',stop);
   return server;
