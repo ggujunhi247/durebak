@@ -24,7 +24,9 @@ try {
   const updateDirectory=join(directory,'update policy 한글');
   const updateStatus=JSON.parse((await command('update','status','--update-dir',updateDirectory)).stdout);
   assert.equal(updateStatus.current,manifest.version);assert.equal(updateStatus.mode,'disabled');assert.equal(updateStatus.automatic_apply,false);
-  assert.ok(updateStatus.apply_blockers.includes('release_trust_not_configured'));
+  await assert.rejects(command('update','enable','--mode','auto','--channel','alpha','--update-dir',updateDirectory),error=>{
+    assert.deepEqual(JSON.parse(error.stderr),{error:'automatic_apply_not_configured'});return true;
+  });
   assert.deepEqual(JSON.parse((await command('update','worker','--update-dir',updateDirectory)).stdout),{checked:false,notice:false});
   await assert.rejects(command('update','apply','--version',manifest.version,'--update-dir',updateDirectory),error=>{
     assert.deepEqual(JSON.parse(error.stderr),{error:'automatic_apply_not_configured'});return true;

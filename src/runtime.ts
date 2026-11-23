@@ -8,7 +8,8 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { Store } from './store.js';
 import { DomainError, fail, sendSchema, taskSchema, type Session } from './domain.js';
-import { acquireMaintenanceGate } from './database.js';
+import {assertNoPendingNpmUpdate} from './update-installation.js';
+import {acquireRuntimeMaintenance} from './update-inventory.js';
 import {managedBindSchema,managedPolicySchema,managedRenewSchema} from './managed-control.js';
 import {revisionSchema,evidenceSchema} from './verification.js';
 import {reviewSchema,deploymentSchema} from './review-records.js';
@@ -157,7 +158,8 @@ function respond(res: ServerResponse, status: number, value: unknown) {
 }
 
 export async function startRuntime(directory: string) {
-  const release=acquireMaintenanceGate(directory,'runtime');
+  assertNoPendingNpmUpdate();
+  const release=acquireRuntimeMaintenance(directory);
   try{
     const runtime=await openRuntime(directory);
     let closing:Promise<void>|undefined;

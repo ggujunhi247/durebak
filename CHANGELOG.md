@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-alpha.28 — 2026-11-23
+
+- Add opt-in signed automatic updates for eligible user-owned npm global installs on Linux and macOS. Disable or pin the policy to stop installation attempts.
+- Stage and verify releases before switching, fence active work across known data directories, and register independent recovery before changing the active package.
+- Publish platform-specific Ed25519 update envelopes alongside the GitHub prerelease artifact.
+
 ## 0.1.0-alpha.27 — 2026-11-23
 
 - Record independent review decisions for delivered result revisions and preserve prior decisions when an artifact changes.

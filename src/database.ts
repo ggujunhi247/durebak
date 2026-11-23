@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync, lstatSync, openSync, closeSync, constants } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, lstatSync, openSync, closeSync, realpathSync, constants } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 import { fail } from './domain.js';
 import { migrate, schemaVersion } from './migrations.js';
 
@@ -11,6 +11,18 @@ export function privateDirectory(path: string) {
   mkdirSync(path, { recursive: true, mode: 0o700 });
   const stat = lstatSync(path.replace(/\/+$/,'')||'/');
   if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || stat.uid !== process.geteuid?.()) fail('unsafe_data_directory');
+}
+
+export function acquireKnownMaintenance(directories:readonly string[]):()=>void {
+  if(directories.length===0||directories.length>64||directories.some(path=>!isAbsolute(path)))fail('maintenance_gate_unavailable');
+  const known=[...new Set(directories.map(path=>realpathSync(path)))].sort();
+  const releases:(()=>void)[]=[];
+  try{
+    for(const directory of known)releases.push(acquireMaintenanceGate(directory,'maintenance'));
+  }catch(error){release();throw error;}
+  return release;
+
+  function release(){while(releases.length)releases.pop()!();}
 }
 
 function privateDatabaseFile(path:string,optional=false) {
@@ -66,6 +78,7 @@ function assertIdle(directory:string) {
   try{
     if(db.prepare('PRAGMA user_version').get()?.user_version!==schemaVersion)fail('manual_migration_required');
     if(db.prepare("SELECT 1 FROM work_attempts WHERE state NOT IN ('completed','cancelled') OR active_released<>1 LIMIT 1").get())fail('update_execution_unresolved');
+    if(db.prepare("SELECT 1 FROM requests WHERE state='accepted' LIMIT 1").get())fail('update_request_unresolved');
   }finally{db.close();}
 }
 
