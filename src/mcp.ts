@@ -5,7 +5,8 @@ import { version } from './version.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { credential, request } from './client.js';
-import { acquireMaintenanceGate } from './database.js';
+import {assertNoPendingNpmUpdate} from './update-installation.js';
+import {acquireRuntimeMaintenance} from './update-inventory.js';
 import { DomainError } from './domain.js';
 import { operations, type Operation } from './runtime.js';
 
@@ -69,8 +70,9 @@ const descriptions: Record<PublicOperation,string> = {
 };
 
 export async function serveMcp(file: string) {
+  assertNoPendingNpmUpdate();
   const identity = credential(file);
-  const release=acquireMaintenanceGate(identity.data_dir,'runtime');
+  const release=acquireRuntimeMaintenance(identity.data_dir);
   try{return await openMcp(identity,release);}
   catch(error){release();throw error;}
 }

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import {handleUpdateCommand,updateCommandContext,cachedUpdateNotice} from './update-cli.js';
+import {assertNoPendingNpmUpdate} from './update-installation.js';
 import {managedBindSchema} from './managed-control.js';
 import { resolveHarness, legacyProvider } from './harnesses/registry.js';
 import { harnessCatalog } from './harnesses/catalog.js';
@@ -23,9 +24,9 @@ const help = `Durebak ${version} — local cooperative session bus
 
   durebak update-check [--channel alpha|beta|rc|stable]  Read published update candidates
   durebak update status|disable|unpin [--update-dir PATH]
-  durebak update enable --mode notify --channel alpha|beta|rc|stable
+  durebak update enable --mode notify|auto --channel alpha|beta|rc|stable
   durebak update pin VERSION                     Pin notification policy version
-  durebak update apply --version VERSION         Report blocked automatic-apply prerequisites
+  durebak update apply --version VERSION         Apply a verified update when auto is enabled
   durebak harnesses                              Read harness capability evidence (no host execution)
   durebak serve [--data-dir PATH]                  Run loopback daemon in foreground
   durebak register --workspace PATH --alias NAME --harness codex|claude-code|opencode|other [--out FILE] [--data-dir PATH]
@@ -65,6 +66,7 @@ async function main() {
   if(command==='update'||command==='update-check'){
     output(await handleUpdateCommand(command==='update-check'?'check':positionals[1]??'status',positionals.slice(command==='update-check'?1:2),{...(values.mode===undefined?{}:{mode:values.mode}),...(values.channel===undefined?{}:{channel:values.channel}),...(typeof values.version==='string'?{target:values.version}:{})},updateCommandContext(values['update-dir'])));return;
   }
+  assertNoPendingNpmUpdate();
   if(process.stderr.isTTY&&command!=='mcp'&&['skills','harnesses','paths','serve','register','revoke','setup','managed-bind','managed-policy','dashboard','doctor','call','export'].includes(command)){
     try{const context=updateCommandContext();const notice=cachedUpdateNotice(context.directory,version);if(notice)process.stderr.write(notice);}catch{/* A stale notification cannot break an unrelated command. */}
   }

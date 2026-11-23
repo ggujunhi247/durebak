@@ -1,6 +1,6 @@
 # 설치·업데이트·새 버전 알림
 
-두레박의 npm 배포, GitHub 배포 파일, 개발 소스는 서로 다른 경로입니다. GitHub Release 게시가 npm 게시 성공을 뜻하지는 않습니다. 현재 제품 실행 대상은 macOS/Linux, Node.js 24 이상입니다. Windows native 실행·WinGet·PowerShell 전용 설치기·제품 내 자동 업데이트는 아직 지원하지 않습니다.
+두레박의 npm 배포, GitHub 배포 파일, 개발 소스는 서로 다른 경로입니다. GitHub Release 게시가 npm 게시 성공을 뜻하지는 않습니다. 현재 제품 실행 대상은 macOS/Linux, Node.js 24 이상입니다. Windows native 실행·WinGet·PowerShell 전용 설치기는 아직 지원하지 않습니다.
 
 ## 어디서 받나요?
 
@@ -86,7 +86,7 @@ GitHub 릴리스 알림은 그 릴리스가 게시됐다는 뜻입니다. npm �
 
 ## 제품 내 업데이트 확인·알림 (alpha.24부터)
 
-아래 명령은 **alpha.24부터 포함되며 기존 alpha.23 배포 파일에는 없습니다**. 실제 게시 여부는 위 배포처에서 확인하세요. 새 버전 확인·알림·정책을 제공하며 설치 파일을 변경하지 않습니다. 자동 설치/rollback은 아직 구현되지 않았습니다.
+업데이트 확인·알림은 **alpha.24부터** 포함됩니다. 자동 설치는 **alpha.28부터** 사용자가 설정에서 켤 수 있습니다. 실제 게시 여부는 위 배포처에서 확인하세요.
 
 ```sh
 durebak update-check --channel alpha
@@ -105,7 +105,17 @@ durebak update disable
 
 `pin`은 후보 상태를 pinned로 표시하고 새 버전 알림을 중지합니다. `disable`은 정책부터 중지한 뒤 소유가 확인되는 예약만 제거합니다. 예약 파일이 외부에서 수정되면 덮어쓰거나 삭제하지 않고 conflict를 반환합니다. 제거 실패여도 disabled 정책은 유지합니다. 알림을 다시 켜면 소유한 예약 파일을 재검사·등록합니다.
 
-`update enable --mode auto`와 `update apply --version VERSION`은 `automatic_apply_not_configured`로 차단됩니다. `update status`의 `apply_blockers`는 운영 서명 키, 설치 소유자, maintenance gate, 독립 복구 worker 부재를 표시합니다. 자동 설치·DB 관문·실패 복구와 Windows 설치기는 [업데이트 설계](UPDATE-DESIGN.md)의 남은 구현 범위입니다. 테스트용 서명 검증 성공을 운영 자동 적용 지원으로 보지 않습니다.
+### 자동 설치 켜기와 끄기
+
+먼저 실행 중인 기존 데몬과 MCP를 종료한 뒤 alpha.28 이상으로 수동 업데이트하세요. 지원 범위는 사용자 홈 아래의 단일 npm 전역 설치와 같은 Node 배포본의 npm CLI가 확인되는 Linux·macOS 환경입니다. 이 설치에서 실제 사용하는 각 데이터 경로를 데몬 또는 MCP로 한 번 열어 목록에 수집하세요.
+
+```sh
+durebak update enable --mode auto --channel alpha
+durebak update status
+durebak update disable
+```
+
+`auto`는 npm과 GitHub 양쪽의 같은 버전, Ed25519 서명, 패키지 해시, 동일 DB 스키마·프로토콜을 확인합니다. 데몬·MCP가 실행 중이거나 수락한 작업이 남아 있으면 보류됩니다. `update pin VERSION`은 자동 적용을 보류하고 `unpin`은 해제합니다. `disable`은 준비 중인 적용과 다음 예약을 중단하며 이미 시작한 교체의 복구 예약은 유지합니다. `update status`의 `last_apply`에서 적용 또는 보류 사유를 확인할 수 있습니다. 직접 적용하려면 `auto`를 켠 뒤 `durebak update apply --version VERSION`을 사용합니다. 서명은 태그 생성 시점부터 7일간 유효합니다. Windows, `npx`, 프로젝트 로컬 설치는 수동 업데이트를 사용합니다.
 
 공식 npm 명령 참고: [npm install](https://docs.npmjs.com/cli/v11/commands/npm-install/), [npm view](https://docs.npmjs.com/cli/v11/commands/npm-view/).
 
